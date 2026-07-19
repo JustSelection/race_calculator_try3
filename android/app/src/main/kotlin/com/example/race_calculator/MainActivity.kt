@@ -1,4 +1,4 @@
-package com.example.race_calculator_try3
+package com.example.race_calculator
 
 import io.flutter.embedding.android.FlutterActivity
 
