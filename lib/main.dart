@@ -4,12 +4,15 @@ import 'services/database_helper.dart';
 import 'providers/car_provider.dart';
 import 'providers/trip_provider.dart';
 import 'providers/calculator_provider.dart';
+import 'providers/generator_provider.dart';
+import 'providers/optimization_provider.dart';
+import 'providers/optimization_settings_provider.dart';
 import 'screens/calculator_screen.dart';
 import 'screens/cars_list_screen.dart';
+import 'screens/generators_list_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Инициализируем БД заранее, чтобы избежать задержек при первом запросе
   await DatabaseHelper().database;
   runApp(const MyApp());
 }
@@ -24,6 +27,10 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CarProvider()..loadCars()),
         ChangeNotifierProvider(create: (_) => TripProvider()),
         ChangeNotifierProvider(create: (_) => CalculatorProvider()),
+        // Новые провайдеры для агрегатов
+        ChangeNotifierProvider(create: (_) => GeneratorProvider()..loadGenerators()),
+        ChangeNotifierProvider(create: (_) => OptimizationProvider()),
+        ChangeNotifierProvider(create: (_) => OptimizationSettingsProvider()..loadSettings()),
       ],
       child: MaterialApp(
         title: 'Калькулятор пробега',
@@ -48,10 +55,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   
-  // Экраны
   final _screens = const [
     CalculatorScreen(),
     CarsListScreen(),
+    GeneratorsListScreen(), // Новый экран
   ];
 
   @override
@@ -69,6 +76,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.directions_car),
             label: 'Автомобили',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.build), // Иконка для агрегатов/оборудования
+            label: 'Агрегаты',
           ),
         ],
       ),

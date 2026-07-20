@@ -18,8 +18,9 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'mileage_calculator.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -49,5 +50,53 @@ class DatabaseHelper {
         FOREIGN KEY (carId) REFERENCES cars (id) ON DELETE CASCADE
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE generators (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        carId INTEGER,
+        name TEXT NOT NULL,
+        capacity REAL NOT NULL,
+        currentFuel REAL NOT NULL,
+        FOREIGN KEY (carId) REFERENCES cars (id) ON DELETE SET NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE optimizations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        generatorId INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        fuelAmount REAL NOT NULL,
+        comment TEXT NOT NULL,
+        FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE generators (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          carId INTEGER,
+          name TEXT NOT NULL,
+          capacity REAL NOT NULL,
+          currentFuel REAL NOT NULL,
+          FOREIGN KEY (carId) REFERENCES cars (id) ON DELETE SET NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE optimizations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          generatorId INTEGER NOT NULL,
+          date TEXT NOT NULL,
+          fuelAmount REAL NOT NULL,
+          comment TEXT NOT NULL,
+          FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+        )
+      ''');
+    }
   }
 }
