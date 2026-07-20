@@ -16,6 +16,7 @@ class CalculatorProvider with ChangeNotifier {
   CalculationResult? _result;
   String? _errorMessage;
   bool _isCalculated = false;
+  bool _isSaving = false;
 
   // Getters
   Car? get selectedCar => _selectedCar;
@@ -27,17 +28,48 @@ class CalculatorProvider with ChangeNotifier {
   CalculationResult? get result => _result;
   String? get errorMessage => _errorMessage;
   bool get isCalculated => _isCalculated;
+  bool get isSaving => _isSaving;
 
   /// Инициализация калькулятора при выборе авто
   void initForCar(Car car, Trip? lastTrip) {
     _selectedCar = car;
     _tripDate = DateTime.now();
-    _startMileage = lastTrip?.endMileage ?? car.currentMileage;
-    _endMileage = _startMileage;
-    _fuelAtDeparture = lastTrip?.remainingFuel ?? car.fuelInTank;
-    _refueled = 0.0;
+    _applySmartDefaults(car, lastTrip);
     _clearResult();
     notifyListeners();
+  }
+
+  /// ЖЕСТКОЕ обновление данных из актуального профиля (вызывается экраном при необходимости)
+  void forceRefreshData(Car freshCar, Trip? lastTrip) {
+    if (_selectedCar == null || _selectedCar!.id != freshCar.id) return;
+
+    _selectedCar = freshCar;
+    _applySmartDefaults(freshCar, lastTrip);
+    
+    _clearResult(); 
+    notifyListeners();
+  }
+
+  /// Умная логика автозаполнения: профиль побеждает, если он был изменен вручную
+  void _applySmartDefaults(Car car, Trip? lastTrip) {
+    // Проверяем, совпадают ли текущие данные авто с концом последнего рейса
+    final bool matchesLastTrip = lastTrip != null && 
+                                 car.currentMileage == lastTrip.endMileage && 
+                                 car.fuelInTank == lastTrip.remainingFuel;
+
+    if (matchesLastTrip) {
+      // Стандартный сценарий: продолжаем с того места, где закончили
+      _startMileage = lastTrip.endMileage; // <-- ИСПРАВЛЕНО: убран лишний '!'
+      _fuelAtDeparture = lastTrip.remainingFuel;
+    } else {
+      // Сценарий ручной правки: пользователь изменил профиль, берем данные из профиля
+      _startMileage = car.currentMileage;
+      _fuelAtDeparture = car.fuelInTank;
+    }
+    
+    // Сбрасываем конечные значения на начальные для нового расчета
+    _endMileage = _startMileage;
+    _refueled = 0.0;
   }
 
   // Сеттеры с очисткой результата при изменении вводных
@@ -51,6 +83,7 @@ class CalculatorProvider with ChangeNotifier {
     _result = null;
     _errorMessage = null;
     _isCalculated = false;
+    _isSaving = false;
   }
 
   /// Запуск расчета через защищенный сервис
@@ -80,29 +113,36 @@ class CalculatorProvider with ChangeNotifier {
 
   /// Сохранение рейса и обновление профиля авто
   Future<void> saveTrip(TripProvider tripProvider, CarProvider carProvider) async {
+    if (_isSaving) return;
     if (!_isCalculated || _result == null || _selectedCar == null) return;
 
-    final newTrip = Trip(
-      carId: _selectedCar!.id!,
-      date: _tripDate,
-      startMileage: _startMileage,
-      endMileage: _endMileage,
-      fuelAtDeparture: _fuelAtDeparture,
-      refueled: _refueled,
-      remainingFuel: _result!.remainingFuel,
-    );
-
-    // 1. Сохраняем рейс
-    await tripProvider.addTrip(newTrip);
-
-    // 2. Обновляем текущий пробег и остаток топлива в профиле авто
-    final updatedCar = _selectedCar!.copyWith(
-      currentMileage: _endMileage,
-      fuelInTank: _result!.remainingFuel,
-    );
-    await carProvider.updateCar(updatedCar);
-    
-    _selectedCar = updatedCar;
+    _isSaving = true;
     notifyListeners();
+
+    try {
+      final newTrip = Trip(
+        carId: _selectedCar!.id!,
+        date: _tripDate,
+        startMileage: _startMileage,
+        endMileage: _endMileage,
+        fuelAtDeparture: _fuelAtDeparture,
+        refueled: _refueled,
+        remainingFuel: _result!.remainingFuel,
+      );
+
+      await tripProvider.addTrip(newTrip);
+
+      final updatedCar = _selectedCar!.copyWith(
+        currentMileage: _endMileage,
+        fuelInTank: _result!.remainingFuel,
+      );
+      await carProvider.updateCar(updatedCar);
+      
+      _selectedCar = updatedCar;
+      _clearResult();
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
   }
 }

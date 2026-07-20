@@ -52,6 +52,8 @@ class Car {
       'fuelInTank': fuelInTank,
       'tankCapacity': tankCapacity,
     };
+
+    
   }
 
   factory Car.fromMap(Map<String, dynamic> map) {
@@ -65,4 +67,12 @@ class Car {
       tankCapacity: (map['tankCapacity'] as num).toDouble(),
     );
   }
+    @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is Car && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }

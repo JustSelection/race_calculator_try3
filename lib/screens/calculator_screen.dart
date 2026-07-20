@@ -27,6 +27,40 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     super.dispose();
   }
 
+  // --- ДОБАВЛЕНО: Автоматическая синхронизация при изменении данных в профиле ---
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    final calcProv = Provider.of<CalculatorProvider>(context, listen: false);
+    final carProv = Provider.of<CarProvider>(context, listen: false);
+    final tripProv = Provider.of<TripProvider>(context, listen: false);
+
+    if (calcProv.selectedCar != null) {
+      final freshCar = carProv.getCarById(calcProv.selectedCar!.id!);
+      if (freshCar != null) {
+        // Проверяем, устарели ли данные в калькуляторе по сравнению с профилем
+        final isStale = calcProv.selectedCar!.currentMileage != freshCar.currentMileage ||
+                        calcProv.selectedCar!.fuelInTank != freshCar.fuelInTank ||
+                        calcProv.selectedCar!.fuelConsumption != freshCar.fuelConsumption;
+        
+        if (isStale) {
+          // Откладываем обновление до конца текущего кадра сборки, чтобы избежать ошибок Flutter
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            tripProv.getLastTrip(freshCar.id!).then((lastTrip) {
+              if (!mounted) return;
+              // Жестко обновляем данные в провайдере калькулятора
+              calcProv.forceRefreshData(freshCar, lastTrip);
+              // Синхронизируем текстовые поля на экране
+              _syncControllers(calcProv); 
+            });
+          });
+        }
+      }
+    }
+  }
+
   void _syncControllers(CalculatorProvider calc) {
     _startMileageCtrl.text = calc.startMileage.toString();
     _endMileageCtrl.text = calc.endMileage.toString();
@@ -59,8 +93,14 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 Expanded(child: ElevatedButton(onPressed: _calculate, child: const Text('Рассчитать'))),
                 const SizedBox(width: 8),
                 Expanded(child: ElevatedButton(
-                  onPressed: calcProv.isCalculated ? _save : null, 
-                  child: const Text('Сохранить')
+                  onPressed: calcProv.isCalculated && !calcProv.isSaving ? _save : null, 
+                  child: calcProv.isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Сохранить'),
                 )),
               ]),
               if (calcProv.errorMessage != null) 
@@ -77,10 +117,22 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   Widget _buildCarDropdown(BuildContext ctx, CarProvider carProv, TripProvider tripProv, CalculatorProvider calcProv) {
+    final Car? selectedCar = calcProv.selectedCar == null 
+        ? null 
+        : carProv.cars.firstWhere(
+            (c) => c.id == calcProv.selectedCar!.id, 
+            orElse: () => calcProv.selectedCar!,
+          );
+
     return DropdownButtonFormField<Car>(
-      initialValue: calcProv.selectedCar,
+      initialValue: selectedCar,
       decoration: const InputDecoration(labelText: 'Автомобиль', border: OutlineInputBorder()),
-      items: carProv.cars.map((car) => DropdownMenuItem(value: car, child: Text('${car.brand} (${car.licensePlate})'))).toList(),
+      items: carProv.cars.map((car) {
+        return DropdownMenuItem<Car>(
+          value: car,
+          child: Text('${car.brand} (${car.licensePlate})'),
+        );
+      }).toList(),
       onChanged: (car) async {
         if (car != null) {
           await tripProv.loadTrips(car.id!);
@@ -129,16 +181,12 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
 
   void _calculate() {
     final calc = Provider.of<CalculatorProvider>(context, listen: false);
-    
-    // Читаем начальный пробег из поля ввода
     if (int.tryParse(_startMileageCtrl.text) != null) {
       calc.setStartMileage(int.parse(_startMileageCtrl.text));
     }
-    
     if (int.tryParse(_endMileageCtrl.text) != null) calc.setEndMileage(int.parse(_endMileageCtrl.text));
     if (double.tryParse(_fuelDepartureCtrl.text) != null) calc.setFuelAtDeparture(double.parse(_fuelDepartureCtrl.text));
     if (double.tryParse(_refueledCtrl.text) != null) calc.setRefueled(double.parse(_refueledCtrl.text));
-    
     calc.calculate();
   }
 

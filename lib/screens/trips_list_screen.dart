@@ -41,7 +41,7 @@ class _TripsListScreenState extends State<TripsListScreen> {
       );
       await carProv.updateCar(updatedCar);
     } else {
-      // Если рейсов больше нет, сбрасываем пробег и топливо к нулю (или можно оставить как есть)
+      // Если рейсов больше нет, сбрасываем пробег и топливо к нулю
       final updatedCar = widget.car.copyWith(
         currentMileage: 0,
         fuelInTank: 0.0,
@@ -91,11 +91,57 @@ class _TripListTile extends StatelessWidget {
 
   const _TripListTile({required this.trip, required this.car, required this.onDelete});
 
+  void _showTripSummary(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Сводка по рейсу'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildRow('Дата:', DateFormat('dd.MM.yyyy').format(trip.date)),
+              _buildRow('Нач. пробег:', '${trip.startMileage} км'),
+              _buildRow('Кон. пробег:', '${trip.endMileage} км'),
+              _buildRow('Дистанция:', '${trip.distance} км'),
+              const Divider(height: 24),
+              _buildRow('Топливо на выезде:', '${trip.fuelAtDeparture.toStringAsFixed(2)} л'),
+              _buildRow('Заправлено:', '${trip.refueled.toStringAsFixed(2)} л'),
+              _buildRow('Затрачено:', '${trip.fuelConsumed.toStringAsFixed(2)} л'),
+              _buildRow('Остаток:', '${trip.remainingFuel.toStringAsFixed(2)} л', isBold: true),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRow(String label, String value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: ListTile(
+        onTap: () => _showTripSummary(context), // <-- ДОБАВЛЕНО: вызов сводки при нажатии на карточку
         title: Text(DateFormat('dd.MM.yyyy').format(trip.date)),
         subtitle: Text(
           'Дистанция: ${trip.distance} км | Остаток: ${trip.remainingFuel.toStringAsFixed(2)} л',
