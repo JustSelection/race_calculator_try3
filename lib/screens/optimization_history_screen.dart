@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/optimization_model.dart';
+import '../models/car_model.dart';
 import '../providers/generator_provider.dart';
 import '../providers/optimization_provider.dart';
+import '../providers/car_provider.dart';
 
 enum HistoryFilter { all, week, month }
 
@@ -45,6 +47,18 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
     return 'Удаленный агрегат';
   }
 
+  String _getCarInfo(List<Car> cars, int? carId) {
+    if (carId == null) return 'Не привязан';
+    final car = cars.firstWhere(
+      (c) => c.id == carId,
+      orElse: () => Car(
+        id: -1, brand: 'Неизвестно', licensePlate: '',
+        fuelConsumption: 0, currentMileage: 0, fuelInTank: 0, tankCapacity: 0,
+      ),
+    );
+    return '${car.brand} (${car.licensePlate})';
+  }
+
   @override
   Widget build(BuildContext context) {
     final optProv = context.watch<OptimizationProvider>();
@@ -84,7 +98,7 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         child: ListTile(
-                          onTap: () => _showDetails(context, opt, genName),
+                          onTap: () => _showDetails(context, opt, genName, genProv.generators),
                           title: Text('$genName — ${opt.fuelAmount.toStringAsFixed(2)} л'),
                           subtitle: Text(
                             '$dateStr\n${opt.comment}',
@@ -105,7 +119,7 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
     );
   }
 
-  void _showDetails(BuildContext context, OptimizationModel opt, String genName) {
+  void _showDetails(BuildContext context, OptimizationModel opt, String genName, List<dynamic> generators) {
     final dateStr =
         '${opt.date.day.toString().padLeft(2, '0')}.'
         '${opt.date.month.toString().padLeft(2, '0')}.'
@@ -113,25 +127,52 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
         '${opt.date.hour.toString().padLeft(2, '0')}:'
         '${opt.date.minute.toString().padLeft(2, '0')}';
 
+    // Получаем текущую привязку агрегата к автомобилю
+    dynamic gen;
+    try {
+      gen = generators.firstWhere((g) => g.id == opt.generatorId);
+    } catch (_) {
+      gen = null;
+    }
+    final cars = context.read<CarProvider>().cars;
+    final carInfo = gen != null ? _getCarInfo(cars, gen.carId) : 'Агрегат удалён';
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Сводка списания', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const Divider(),
-            _detailRow('Агрегат', genName),
-            _detailRow('Дата', dateStr),
-            _detailRow('Списано', '${opt.fuelAmount.toStringAsFixed(2)} л'),
-            _detailRow('Комментарий', opt.comment),
-            const SizedBox(height: 16),
-          ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Сводка списания', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(),
+              _detailRow('Агрегат', genName),
+              _detailRow('Автомобиль', carInfo),
+              _detailRow('Дата', dateStr),
+              _detailRow('Списано', '${opt.fuelAmount.toStringAsFixed(2)} л'),
+              const SizedBox(height: 8),
+              const Text('Комментарий:', style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 4),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(
+                    opt.comment,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
