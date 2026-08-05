@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/generator_model.dart';
+import '../models/car_model.dart';
 import '../providers/generator_provider.dart';
+import '../providers/car_provider.dart';
 
 class TransferFuelScreen extends StatefulWidget {
   const TransferFuelScreen({super.key});
@@ -25,9 +27,22 @@ class _TransferFuelScreenState extends State<TransferFuelScreen> {
     super.dispose();
   }
 
+  String _getCarInfo(List<Car> cars, int? carId) {
+    if (carId == null) return 'Не привязан';
+    final car = cars.firstWhere(
+      (c) => c.id == carId,
+      orElse: () => Car(
+        id: -1, brand: 'Неизвестно', licensePlate: '',
+        fuelConsumption: 0, currentMileage: 0, fuelInTank: 0, tankCapacity: 0,
+      ),
+    );
+    return '${car.brand} (${car.licensePlate})';
+  }
+
   @override
   Widget build(BuildContext context) {
     final generators = context.watch<GeneratorProvider>().generators;
+    final cars = context.watch<CarProvider>().cars;
 
     final sourceGen = generators.firstWhere(
       (g) => g.id == _sourceId,
@@ -56,7 +71,12 @@ class _TransferFuelScreenState extends State<TransferFuelScreen> {
                 value: _sourceId,
                 items: generators.map((g) => DropdownMenuItem(
                   value: g.id,
-                  child: Text('${g.name} (${g.currentFuel}/${g.capacity} л)'),
+                  child: _buildGeneratorItem(
+                    name: g.name,
+                    carInfo: _getCarInfo(cars, g.carId),
+                    isCarBound: g.carId != null,
+                    extraInfo: '${g.currentFuel}/${g.capacity} л',
+                  ),
                 )).toList(),
                 onChanged: (val) {
                   setState(() {
@@ -75,7 +95,12 @@ class _TransferFuelScreenState extends State<TransferFuelScreen> {
                     .where((g) => g.id != _sourceId)
                     .map((g) => DropdownMenuItem(
                           value: g.id,
-                          child: Text('${g.name} (свободно: ${_round(g.capacity - g.currentFuel)} л)'),
+                          child: _buildGeneratorItem(
+                            name: g.name,
+                            carInfo: _getCarInfo(cars, g.carId),
+                            isCarBound: g.carId != null,
+                            extraInfo: 'свободно: ${_round(g.capacity - g.currentFuel)} л',
+                          ),
                         ))
                     .toList(),
                 onChanged: (val) {
@@ -121,6 +146,37 @@ class _TransferFuelScreenState extends State<TransferFuelScreen> {
     );
   }
 
+  Widget _buildGeneratorItem({
+    required String name,
+    required String carInfo,
+    required bool isCarBound,
+    required String extraInfo,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$name — $extraInfo',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            carInfo,
+            style: TextStyle(
+              fontSize: 11,
+              color: isCarBound ? Colors.grey.shade600 : Colors.grey.shade500,
+              fontStyle: isCarBound ? FontStyle.normal : FontStyle.italic,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDropdown({
     required String label,
     required int? value,
@@ -138,6 +194,7 @@ class _TransferFuelScreenState extends State<TransferFuelScreen> {
             DropdownButton<int?>(
               isExpanded: true,
               value: value,
+              itemHeight: null, // ВАЖНО: разрешает автоматическую высоту для многострочного текста
               hint: const Text('Выберите...'),
               items: items.isEmpty 
                   ? [const DropdownMenuItem(value: null, child: Text('Нет доступных агрегатов'))] 

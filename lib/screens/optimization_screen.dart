@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/generator_model.dart';
 import '../models/optimization_model.dart';
+import '../models/car_model.dart';
 import '../providers/generator_provider.dart';
 import '../providers/optimization_provider.dart';
+import '../providers/car_provider.dart';
 
 class OptimizationScreen extends StatefulWidget {
   final int? preselectedGeneratorId;
@@ -20,6 +22,7 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
   final _commentController = TextEditingController();
   
   int? _selectedGeneratorId;
+  String? _generatorError;
 
   double _round(double value) => double.parse(value.toStringAsFixed(2));
 
@@ -36,9 +39,50 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
     super.dispose();
   }
 
+  String _getCarInfo(List<Car> cars, int? carId) {
+    if (carId == null) return 'Не привязан';
+    final car = cars.firstWhere(
+      (c) => c.id == carId,
+      orElse: () => Car(
+        id: -1, brand: 'Неизвестно', licensePlate: '',
+        fuelConsumption: 0, currentMileage: 0, fuelInTank: 0, tankCapacity: 0,
+      ),
+    );
+    return '${car.brand} (${car.licensePlate})';
+  }
+
+  Widget _buildGeneratorItem({
+    required String name,
+    required String carInfo,
+    required bool isCarBound,
+    required String extraInfo,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$name — $extraInfo',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          carInfo,
+          style: TextStyle(
+            fontSize: 11,
+            color: isCarBound ? Colors.grey.shade600 : Colors.grey.shade500,
+            fontStyle: isCarBound ? FontStyle.normal : FontStyle.italic,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final generators = context.watch<GeneratorProvider>().generators;
+    final cars = context.watch<CarProvider>().cars;
 
     final selectedGen = generators.firstWhere(
       (g) => g.id == _selectedGeneratorId,
@@ -53,15 +97,48 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              DropdownButtonFormField<int?>(
-                initialValue: _selectedGeneratorId,
-                decoration: const InputDecoration(labelText: 'Агрегат'),
-                items: generators.map((g) => DropdownMenuItem<int?>(
-                  value: g.id,
-                  child: Text('${g.name} (доступно: ${g.currentFuel} л)'),
-                )).toList(),
-                onChanged: (val) => setState(() => _selectedGeneratorId = val),
-                validator: (val) => val == null ? 'Выберите агрегат' : null,
+              // Кастомное поле с валидацией
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Агрегат', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: _generatorError != null ? Colors.red : Colors.grey.shade300,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: DropdownButton<int?>(
+                      value: _selectedGeneratorId,
+                      isExpanded: true,
+                      underline: const SizedBox(), // Убираем стандартное подчеркивание
+                      hint: const Text('Выберите агрегат'),
+                      items: generators.map((g) => DropdownMenuItem<int?>(
+                        value: g.id,
+                        child: _buildGeneratorItem(
+                          name: g.name,
+                          carInfo: _getCarInfo(cars, g.carId),
+                          isCarBound: g.carId != null,
+                          extraInfo: 'доступно: ${g.currentFuel} л',
+                        ),
+                      )).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedGeneratorId = val;
+                          _generatorError = null;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_generatorError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 12),
+                      child: Text(_generatorError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    ),
+                ],
               ),
               const SizedBox(height: 16),
               if (_selectedGeneratorId != null) ...[
@@ -100,6 +177,12 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
   }
 
   Future<void> _saveOptimization() async {
+    // Валидация агрегата
+    if (_selectedGeneratorId == null) {
+      setState(() => _generatorError = 'Выберите агрегат');
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     final amount = double.parse(_amountController.text);
@@ -111,13 +194,11 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
     final generator = genProvider.generators.firstWhere((g) => g.id == _selectedGeneratorId);
     final newFuel = _round(generator.currentFuel - amount);
 
-    // 1. Обновляем топливо в агрегате
     final fuelUpdated = await genProvider.updateFuel(generator.id!, newFuel);
     
     if (!mounted) return;
 
     if (fuelUpdated) {
-      // 2. Создаем запись в истории оптимизации
       final optimization = OptimizationModel(
         generatorId: generator.id!,
         date: DateTime.now(),
