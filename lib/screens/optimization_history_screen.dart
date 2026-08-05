@@ -84,6 +84,7 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         child: ListTile(
+                          onTap: () => _showDetails(context, opt, genName),
                           title: Text('$genName — ${opt.fuelAmount.toStringAsFixed(2)} л'),
                           subtitle: Text(
                             '$dateStr\n${opt.comment}',
@@ -99,6 +100,51 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
                     },
                   ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context, OptimizationModel opt, String genName) {
+    final dateStr =
+        '${opt.date.day.toString().padLeft(2, '0')}.'
+        '${opt.date.month.toString().padLeft(2, '0')}.'
+        '${opt.date.year} '
+        '${opt.date.hour.toString().padLeft(2, '0')}:'
+        '${opt.date.minute.toString().padLeft(2, '0')}';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Сводка списания', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Divider(),
+            _detailRow('Агрегат', genName),
+            _detailRow('Дата', dateStr),
+            _detailRow('Списано', '${opt.fuelAmount.toStringAsFixed(2)} л'),
+            _detailRow('Комментарий', opt.comment),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 110, child: Text('$label:', style: const TextStyle(color: Colors.grey))),
+          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
         ],
       ),
     );

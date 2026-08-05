@@ -19,6 +19,10 @@ class GeneratorsListScreen extends StatefulWidget {
 }
 
 class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
+  int? _selectedCarId; // null = все агрегаты
+
+  double _round(double value) => double.parse(value.toStringAsFixed(2));
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +35,18 @@ class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cars = context.watch<CarProvider>().cars;
+
+    // 🛡️ ЗАЩИТА: Если выбранный автомобиль был удален, сбрасываем фильтр на "Все"
+    if (_selectedCarId != null && _selectedCarId != -1) {
+      final isValid = cars.any((c) => c.id == _selectedCarId);
+      if (!isValid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _selectedCarId = null);
+        });
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Агрегаты'),
@@ -80,10 +96,19 @@ class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final generators = genProv.generators;
-          final cars = context.read<CarProvider>().cars;
+          final allGenerators = genProv.generators;
           final isWeekExceeded = optProv.weekSum > settingsProv.weekLimit;
           final isMonthExceeded = optProv.monthSum > settingsProv.monthLimit;
+
+          // Фильтрация по автомобилю
+          final filteredGenerators = _selectedCarId == null || _selectedCarId == -1
+              ? (_selectedCarId == -1 
+                  ? allGenerators.where((g) => g.carId == null).toList() 
+                  : allGenerators)
+              : allGenerators.where((g) => g.carId == _selectedCarId).toList();
+
+          // Общее топливо для отфильтрованных агрегатов
+          final totalFuel = _round(filteredGenerators.fold(0.0, (sum, g) => sum + g.currentFuel));
 
           return Column(
             children: [
@@ -100,13 +125,45 @@ class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
                     textAlign: TextAlign.center,
                   ),
                 ),
+              // Фильтр по автомобилю
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _selectedCarId,
+                  decoration: const InputDecoration(
+                    labelText: 'Фильтр по автомобилю',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('Все агрегаты')),
+                    const DropdownMenuItem<int?>(value: -1, child: Text('Не привязанные')),
+                    ...cars.map((car) => DropdownMenuItem<int?>(
+                          value: car.id,
+                          child: Text('${car.brand} (${car.licensePlate})'),
+                        )),
+                  ],
+                  onChanged: (value) => setState(() => _selectedCarId = value),
+                ),
+              ),
+              // Общее топливо
+              Container(
+                width: double.infinity,
+                color: Colors.blue.shade50,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                child: Text(
+                  'Общее топливо: $totalFuel л',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
               Expanded(
-                child: generators.isEmpty
-                    ? const Center(child: Text('Нет агрегатов. Добавьте первый.'))
+                child: filteredGenerators.isEmpty
+                    ? const Center(child: Text('Нет агрегатов для выбранного фильтра.'))
                     : ListView.builder(
-                        itemCount: generators.length,
+                        itemCount: filteredGenerators.length,
                         itemBuilder: (context, index) {
-                          final gen = generators[index];
+                          final gen = filteredGenerators[index];
                           final car = gen.carId != null
                               ? cars.firstWhere(
                                   (c) => c.id == gen.carId,
@@ -124,7 +181,7 @@ class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
                               title: Text(gen.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text(
                                 'Топливо: ${gen.currentFuel} / ${gen.capacity} л\n'
-                                'Авто: ${car?.brand ?? "Не привязан"}',
+                                'Авто: ${car != null ? "${car.brand} (${car.licensePlate})" : "Не привязан"}',
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -172,7 +229,7 @@ class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить агрегат?'),
-        content: const Text('Это действие также удалит всю историю оптимизаций этого агрегата.'),
+        content: const Text('Вы уверены, что хотите удалить этот агрегат?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
