@@ -187,7 +187,7 @@ class _GeneratorsListScreenState extends State<GeneratorsListScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.blue),
+                                    icon: const Icon(Icons.oil_barrel, color: Colors.blue),
                                     onPressed: () {
                                       Navigator.push(
                                         context,

@@ -45,6 +45,13 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
   Widget build(BuildContext context) {
     final cars = context.watch<CarProvider>().cars;
 
+        // 🛡️ ПРОВЕРКА: Если автомобиль агрегата был удален, автоматически сбрасываем на "Не привязан"
+    if (_selectedCarId != null && !cars.any((c) => c.id == _selectedCarId)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedCarId = null);
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.generator == null ? 'Новый агрегат' : 'Редактировать агрегат'),
@@ -57,7 +64,7 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Название (напр. Генератор, Канистра ERA)'),
+                decoration: const InputDecoration(labelText: 'Название (напр. Генератор, Канистра)'),
                 validator: (value) => value?.trim().isEmpty ?? true ? 'Введите название' : null,
               ),
               const SizedBox(height: 16),

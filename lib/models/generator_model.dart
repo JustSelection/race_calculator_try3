@@ -1,7 +1,7 @@
 class GeneratorModel {
   final int? id;
   final int? carId; // Привязка к автомобилю (null = не привязан / временно не используется)
-  final String name; // Например: "Генератор", "Канистра ERA 20 л"
+  final String name; // Например: "Генератор", "Канистра 20 л"
   final double capacity; // Полный объем бака агрегата
   final double currentFuel; // Фактическое количество топлива
 
