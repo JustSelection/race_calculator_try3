@@ -58,14 +58,14 @@ class _CarListTile extends StatelessWidget {
   const _CarListTile({required this.car});
 
   void _showCarSummary(BuildContext context) {
-    final tripDao = TripDao(); // <-- Создаем экземпляр здесь, а не как поле класса
+    final tripDao = TripDao();
     
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Сводка: ${car.brand}'),
         content: FutureBuilder<List<Trip>>(
-          future: tripDao.getTripsByCarId(car.id!), // <-- Используем локальную переменную
+          future: tripDao.getTripsByCarId(car.id!),
           builder: (ctx, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -126,7 +126,8 @@ class _CarListTile extends StatelessWidget {
       child: ListTile(
         onTap: () => _showCarSummary(context),
         title: Text('${car.brand} (${car.licensePlate})'),
-        subtitle: Text('Пробег: ${car.currentMileage} км | Бак: ${car.fuelInTank} л'),
+        // ИСПРАВЛЕНО: Разбиваем на две строки через \n для аккуратного отображения
+        subtitle: Text('Пробег: ${car.currentMileage} км\nБак: ${car.fuelInTank.toStringAsFixed(2)} л'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
