@@ -18,7 +18,10 @@ class CalculatorProvider with ChangeNotifier {
   bool _isCalculated = false;
   bool _isSaving = false;
 
-  // Getters
+  // Для отмены последнего сохранения
+  Trip? _lastSavedTrip;
+  Car? _carStateBeforeSave;
+
   Car? get selectedCar => _selectedCar;
   DateTime get tripDate => _tripDate;
   int get startMileage => _startMileage;
@@ -29,8 +32,8 @@ class CalculatorProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isCalculated => _isCalculated;
   bool get isSaving => _isSaving;
+  bool get canUndo => _lastSavedTrip != null;
 
-  /// Инициализация калькулятора при выборе авто
   void initForCar(Car car, Trip? lastTrip) {
     _selectedCar = car;
     _tripDate = DateTime.now();
@@ -39,110 +42,104 @@ class CalculatorProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// ЖЕСТКОЕ обновление данных из актуального профиля (вызывается экраном при необходимости)
   void forceRefreshData(Car freshCar, Trip? lastTrip) {
     if (_selectedCar == null || _selectedCar!.id != freshCar.id) return;
-
     _selectedCar = freshCar;
     _applySmartDefaults(freshCar, lastTrip);
-    
     _clearResult(); 
     notifyListeners();
   }
 
-  /// Умная логика автозаполнения: профиль побеждает, если он был изменен вручную
   void _applySmartDefaults(Car car, Trip? lastTrip) {
-    // Проверяем, совпадают ли текущие данные авто с концом последнего рейса
-    final bool matchesLastTrip = lastTrip != null && 
-                                 car.currentMileage == lastTrip.endMileage && 
-                                 car.fuelInTank == lastTrip.remainingFuel;
-
-    if (matchesLastTrip) {
-      // Стандартный сценарий: продолжаем с того места, где закончили
-      _startMileage = lastTrip.endMileage; // <-- ИСПРАВЛЕНО: убран лишний '!'
+    final bool matches = lastTrip != null && car.currentMileage == lastTrip.endMileage && car.fuelInTank == lastTrip.remainingFuel;
+    if (matches) {
+      _startMileage = lastTrip.endMileage;
       _fuelAtDeparture = lastTrip.remainingFuel;
     } else {
-      // Сценарий ручной правки: пользователь изменил профиль, берем данные из профиля
       _startMileage = car.currentMileage;
       _fuelAtDeparture = car.fuelInTank;
     }
-    
-    // Сбрасываем конечные значения на начальные для нового расчета
     _endMileage = _startMileage;
     _refueled = 0.0;
   }
 
-  // Сеттеры с очисткой результата при изменении вводных
-  void setTripDate(DateTime value) { _tripDate = value; _clearResult(); notifyListeners(); }
-  void setStartMileage(int value) { _startMileage = value; _clearResult(); notifyListeners(); }
-  void setEndMileage(int value) { _endMileage = value; _clearResult(); notifyListeners(); }
-  void setFuelAtDeparture(double value) { _fuelAtDeparture = value; _clearResult(); notifyListeners(); }
-  void setRefueled(double value) { _refueled = value; _clearResult(); notifyListeners(); }
+  void setTripDate(DateTime v) { _tripDate = v; _clearResult(); notifyListeners(); }
+  void setStartMileage(int v) { _startMileage = v; _clearResult(); notifyListeners(); }
+  void setEndMileage(int v) { _endMileage = v; _clearResult(); notifyListeners(); }
+  void setFuelAtDeparture(double v) { _fuelAtDeparture = v; _clearResult(); notifyListeners(); }
+  void setRefueled(double v) { _refueled = v; _clearResult(); notifyListeners(); }
 
   void _clearResult() {
-    _result = null;
-    _errorMessage = null;
-    _isCalculated = false;
-    _isSaving = false;
+    _result = null; _errorMessage = null; _isCalculated = false; _isSaving = false;
   }
 
-  /// Запуск расчета через защищенный сервис
   void calculate() {
-    if (_selectedCar == null) {
-      _errorMessage = 'Сначала выберите автомобиль';
-      notifyListeners();
-      return;
-    }
+    if (_selectedCar == null) { _errorMessage = 'Сначала выберите автомобиль'; notifyListeners(); return; }
     try {
       _result = CalculationService.calculate(
-        startMileage: _startMileage,
-        endMileage: _endMileage,
-        fuelAtDeparture: _fuelAtDeparture,
-        refueled: _refueled,
+        startMileage: _startMileage, endMileage: _endMileage,
+        fuelAtDeparture: _fuelAtDeparture, refueled: _refueled,
         fuelConsumption: _selectedCar!.fuelConsumption,
       );
-      _errorMessage = null;
-      _isCalculated = true;
+      _errorMessage = null; _isCalculated = true;
     } on CalculationException catch (e) {
-      _errorMessage = e.message;
-      _result = null;
-      _isCalculated = false;
+      _errorMessage = e.message; _result = null; _isCalculated = false;
     }
     notifyListeners();
   }
 
-  /// Сохранение рейса и обновление профиля авто
+  Future<void> calculateAndSave(TripProvider tripProvider, CarProvider carProvider) async {
+    calculate();
+    if (_isCalculated && _result != null && _selectedCar != null) {
+      await saveTrip(tripProvider, carProvider);
+    }
+  }
+
   Future<void> saveTrip(TripProvider tripProvider, CarProvider carProvider) async {
-    if (_isSaving) return;
-    if (!_isCalculated || _result == null || _selectedCar == null) return;
-
-    _isSaving = true;
-    notifyListeners();
-
+    if (_isSaving || !_isCalculated || _result == null || _selectedCar == null) return;
+    _isSaving = true; notifyListeners();
     try {
+      _carStateBeforeSave = _selectedCar;
       final newTrip = Trip(
-        carId: _selectedCar!.id!,
-        date: _tripDate,
-        startMileage: _startMileage,
-        endMileage: _endMileage,
-        fuelAtDeparture: _fuelAtDeparture,
-        refueled: _refueled,
-        remainingFuel: _result!.remainingFuel,
+        carId: _selectedCar!.id!, date: _tripDate, startMileage: _startMileage,
+        endMileage: _endMileage, fuelAtDeparture: _fuelAtDeparture,
+        refueled: _refueled, remainingFuel: _result!.remainingFuel,
       );
-
-      await tripProvider.addTrip(newTrip);
-
-      final updatedCar = _selectedCar!.copyWith(
-        currentMileage: _endMileage,
-        fuelInTank: _result!.remainingFuel,
-      );
-      await carProvider.updateCar(updatedCar);
       
+      // ИСПРАВЛЕНО: сохраняем объект, который уже имеет ID из БД
+      _lastSavedTrip = await tripProvider.addTrip(newTrip);
+
+      final updatedCar = _selectedCar!.copyWith(currentMileage: _endMileage, fuelInTank: _result!.remainingFuel);
+      await carProvider.updateCar(updatedCar);
       _selectedCar = updatedCar;
-      _clearResult();
     } finally {
-      _isSaving = false;
+      _isSaving = false; notifyListeners();
+    }
+  }
+
+  Future<void> undoLastSave(TripProvider tripProvider, CarProvider carProvider) async {
+    // ИСПРАВЛЕНО: безопасная проверка ID и try-finally для гарантии сброса состояния
+    if (_lastSavedTrip?.id == null || _carStateBeforeSave == null) return;
+    try {
+      await tripProvider.deleteTrip(_lastSavedTrip!.id!);
+      await carProvider.updateCar(_carStateBeforeSave!);
+      _selectedCar = _carStateBeforeSave;
+    } finally {
+      _lastSavedTrip = null; 
+      _carStateBeforeSave = null;
+      _clearResult(); 
       notifyListeners();
     }
+  }
+
+  void resetForNewCalculation() {
+    _clearResult();
+    if (_selectedCar != null) {
+      _startMileage = _selectedCar!.currentMileage;
+      _endMileage = _startMileage;
+      _fuelAtDeparture = _selectedCar!.fuelInTank;
+      _refueled = 0.0;
+    }
+    notifyListeners();
   }
 }

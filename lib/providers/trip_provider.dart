@@ -17,12 +17,13 @@ class TripProvider with ChangeNotifier {
     return await _tripDao.getLastTripByCarId(carId);
   }
 
-  Future<void> addTrip(Trip trip) async {
+  // ИЗМЕНЕНО: Возвращаем Trip с актуальным ID из БД
+  Future<Trip> addTrip(Trip trip) async {
     final newId = await _tripDao.insertTrip(trip);
     final newTrip = trip.copyWith(id: newId);
-    // Вставляем в начало, так как список отсортирован по дате DESC
-    _trips.insert(0, newTrip); 
+    _trips.insert(0, newTrip);
     notifyListeners();
+    return newTrip;
   }
 
   Future<void> updateTrip(Trip trip) async {
