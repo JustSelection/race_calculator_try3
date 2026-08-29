@@ -39,11 +39,11 @@ class InventoryProvider extends ChangeNotifier {
       // 1. Обновляем фактический уровень топлива в агрегате
       await _genDao.updateFuel(inventory.generatorId, inventory.actualFuel);
 
-      // 2. Записываем событие в аналитику
+      // 2. Записываем событие в аналитику (ИЗМЕНЕНО: "Расход" и модуль числа)
       await _eventDao.insert(AnalyticsEventModel(
         type: 'inventory',
         date: inventory.date,
-        description: 'Инвентаризация: ${inventory.difference} л',
+        description: 'Расход: ${inventory.difference.abs()} л',
         relatedId: inventory.generatorId,
       ));
 
@@ -57,10 +57,9 @@ class InventoryProvider extends ChangeNotifier {
     }
   }
 
-  // 🆕 ДОБАВЛЕНО: Метод для очистки истории инвентаризации (сброс оборота агрегатов при калибровке)
   Future<void> clearInventories() async {
-    await _dao.deleteAll(); // Удаляем все записи из базы данных
-    _inventories = [];      // Очищаем список в памяти
-    notifyListeners();      // Уведомляем интерфейс об изменениях
+    await _dao.deleteAll();
+    _inventories = [];
+    notifyListeners();
   }
 }

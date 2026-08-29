@@ -6,6 +6,7 @@ import '../providers/car_provider.dart';
 import '../providers/generator_provider.dart';
 import '../providers/refuel_provider.dart';
 import '../providers/optimization_provider.dart';
+import '../providers/inventory_provider.dart'; // 🆕 Добавлено
 import '../widgets/refuel_distribution_header.dart';
 import '../widgets/refuel_distribution_list.dart';
 
@@ -34,7 +35,6 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
 
   @override
   void dispose() {
-    // 🆕 ИСПРАВЛЕНО: добавлены фигурные скобки для цикла
     for (final ctrl in _controllers.values) {
       ctrl.dispose();
     }
@@ -43,7 +43,6 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
 
   void _updateSum() {
     double sum = 0.0;
-    // 🆕 ИСПРАВЛЕНО: добавлены фигурные скобки для цикла
     for (final ctrl in _controllers.values) {
       sum += (double.tryParse(ctrl.text) ?? 0.0);
     }
@@ -90,11 +89,13 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
     if (success) {
       final genProv = context.read<GeneratorProvider>();
       final optProv = context.read<OptimizationProvider>();
+      final invProv = context.read<InventoryProvider>(); // 🆕 Получаем провайдер инвентаризации
       
       await genProv.loadGenerators();
       await optProv.loadAnalytics();
+      await invProv.loadInventories(); // 🆕 ПРИНУДИТЕЛЬНО обновляем список инвентаризаций
 
-      if (!mounted) return; // 🆕 ИСПРАВЛЕНО: проверка mounted после await
+      if (!mounted) return;
 
       Navigator.pop(context); 
       Navigator.pop(context); 
@@ -102,7 +103,7 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
         const SnackBar(content: Text('Заправка и фактические уровни сохранены')),
       );
     } else {
-      if (!mounted) return; // 🆕 ИСПРАВЛЕНО: проверка mounted в ветке else перед использованием context
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ошибка при сохранении'), backgroundColor: Colors.red),
       );

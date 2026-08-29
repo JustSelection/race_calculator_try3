@@ -13,9 +13,7 @@ class GeneratorProvider extends ChangeNotifier {
   Future<void> loadGenerators() async {
     _isLoading = true;
     notifyListeners();
-
     _generators = await _dao.getAll();
-
     _isLoading = false;
     notifyListeners();
   }
@@ -23,7 +21,9 @@ class GeneratorProvider extends ChangeNotifier {
   Future<bool> addGenerator(GeneratorModel generator) async {
     final id = await _dao.insert(generator);
     if (id > 0) {
-      await loadGenerators();
+      final newGenerator = generator.copyWith(id: id);
+      _generators.add(newGenerator); // Мгновенное добавление в локальный список
+      notifyListeners();
       return true;
     }
     return false;
@@ -32,7 +32,11 @@ class GeneratorProvider extends ChangeNotifier {
   Future<bool> updateGenerator(GeneratorModel generator) async {
     final rows = await _dao.update(generator);
     if (rows > 0) {
-      await loadGenerators();
+      final index = _generators.indexWhere((g) => g.id == generator.id);
+      if (index != -1) {
+        _generators[index] = generator; // Мгновенное обновление
+        notifyListeners();
+      }
       return true;
     }
     return false;
@@ -41,7 +45,8 @@ class GeneratorProvider extends ChangeNotifier {
   Future<bool> deleteGenerator(int id) async {
     final rows = await _dao.delete(id);
     if (rows > 0) {
-      await loadGenerators();
+      _generators.removeWhere((g) => g.id == id); // Мгновенное удаление
+      notifyListeners();
       return true;
     }
     return false;
@@ -50,7 +55,11 @@ class GeneratorProvider extends ChangeNotifier {
   Future<bool> updateFuel(int id, double newFuel) async {
     final rows = await _dao.updateFuel(id, newFuel);
     if (rows > 0) {
-      await loadGenerators();
+      final index = _generators.indexWhere((g) => g.id == id);
+      if (index != -1) {
+        _generators[index] = _generators[index].copyWith(currentFuel: newFuel); // Мгновенное обновление топлива
+        notifyListeners();
+      }
       return true;
     }
     return false;

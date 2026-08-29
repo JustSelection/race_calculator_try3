@@ -29,7 +29,8 @@ class CalibrationGeneratorList extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: ListTile(
               title: Text(gen.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('Текущий в системе: ${gen.currentFuel} л'),
+              // ИЗМЕНЕНО: добавлен максимальный объем для удобства при инвентаризации
+              subtitle: Text('Текущий: ${gen.currentFuel} л / Макс: ${gen.capacity} л'),
               trailing: SizedBox(
                 width: 100,
                 child: TextField(
