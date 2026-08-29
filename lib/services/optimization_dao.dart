@@ -91,4 +91,14 @@ class OptimizationDao {
       return -1;
     }
   }
+
+  // 🆕 ДОБАВЛЕНО: Удаление всех записей оптимизации (используется при глобальной калибровке)
+  Future<int> deleteAll() async {
+    try {
+      final db = await _dbHelper.database;
+      return await db.delete('optimizations');
+    } catch (e) {
+      return -1;
+    }
+  }
 }

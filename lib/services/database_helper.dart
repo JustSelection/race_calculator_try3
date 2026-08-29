@@ -18,7 +18,7 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'mileage_calculator.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // УВЕЛИЧЕНО: добавлены новые таблицы
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -72,6 +72,57 @@ class DatabaseHelper {
         FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
       )
     ''');
+
+    // НОВЫЕ ТАБЛИЦЫ для расширенного функционала
+    await db.execute('''
+      CREATE TABLE refuels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        totalFuel REAL NOT NULL,
+        comment TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE refuel_distribution (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        refuelId INTEGER NOT NULL,
+        generatorId INTEGER NOT NULL,
+        fuelAmount REAL NOT NULL,
+        FOREIGN KEY (refuelId) REFERENCES refuels (id) ON DELETE CASCADE,
+        FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE inventories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        generatorId INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        previousFuel REAL NOT NULL,
+        actualFuel REAL NOT NULL,
+        difference REAL NOT NULL,
+        FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE calibrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        comment TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE analytics_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        date TEXT NOT NULL,
+        description TEXT NOT NULL,
+        relatedId INTEGER
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -95,6 +146,59 @@ class DatabaseHelper {
           fuelAmount REAL NOT NULL,
           comment TEXT NOT NULL,
           FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+        )
+      ''');
+    }
+
+    // МИГРАЦИЯ ВЕРСИИ 2 -> 3: добавление новых таблиц
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE refuels (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          totalFuel REAL NOT NULL,
+          comment TEXT
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE refuel_distribution (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          refuelId INTEGER NOT NULL,
+          generatorId INTEGER NOT NULL,
+          fuelAmount REAL NOT NULL,
+          FOREIGN KEY (refuelId) REFERENCES refuels (id) ON DELETE CASCADE,
+          FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE inventories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          generatorId INTEGER NOT NULL,
+          date TEXT NOT NULL,
+          previousFuel REAL NOT NULL,
+          actualFuel REAL NOT NULL,
+          difference REAL NOT NULL,
+          FOREIGN KEY (generatorId) REFERENCES generators (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE calibrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          comment TEXT NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE analytics_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type TEXT NOT NULL,
+          date TEXT NOT NULL,
+          description TEXT NOT NULL,
+          relatedId INTEGER
         )
       ''');
     }

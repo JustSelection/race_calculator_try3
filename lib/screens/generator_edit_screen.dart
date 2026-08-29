@@ -17,7 +17,6 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _capacityController;
-  late TextEditingController _fuelController;
   int? _selectedCarId;
 
   @override
@@ -27,9 +26,6 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
     _capacityController = TextEditingController(
       text: widget.generator?.capacity.toString() ?? '',
     );
-    _fuelController = TextEditingController(
-      text: widget.generator?.currentFuel.toString() ?? '',
-    );
     _selectedCarId = widget.generator?.carId;
   }
 
@@ -37,7 +33,6 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
   void dispose() {
     _nameController.dispose();
     _capacityController.dispose();
-    _fuelController.dispose();
     super.dispose();
   }
 
@@ -45,7 +40,7 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
   Widget build(BuildContext context) {
     final cars = context.watch<CarProvider>().cars;
 
-        // 🛡️ ПРОВЕРКА: Если автомобиль агрегата был удален, автоматически сбрасываем на "Не привязан"
+    // 🛡️ ПРОВЕРКА: Если автомобиль агрегата был удален, автоматически сбрасываем на "Не привязан"
     if (_selectedCarId != null && !cars.any((c) => c.id == _selectedCarId)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedCarId = null);
@@ -80,20 +75,9 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _fuelController,
-                decoration: const InputDecoration(labelText: 'Текущее топливо (л)'),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: (value) {
-                  if (value?.trim().isEmpty ?? true) return 'Введите количество топлива';
-                  final val = double.tryParse(value!);
-                  if (val == null || val < 0) return 'Некорректное значение';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
+              // 🗑️ УДАЛЕНО: Поле "Текущее топливо". Уровень меняется только через Инвентаризацию, Калибровку или Заправку.
               DropdownButtonFormField<int?>(
-                initialValue: _selectedCarId, // Исправлено: value -> initialValue
+                initialValue: _selectedCarId,
                 decoration: const InputDecoration(labelText: 'Привязать к автомобилю'),
                 items: [
                   const DropdownMenuItem<int?>(
@@ -123,15 +107,9 @@ class _GeneratorEditScreenState extends State<GeneratorEditScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final capacity = double.parse(_capacityController.text);
-    final currentFuel = double.parse(_fuelController.text);
-
-    if (currentFuel > capacity) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Текущее топливо не может превышать объем бака')),
-      );
-      return;
-    }
+    
+    // 🆕 ЛОГИКА: При редактировании сохраняем старый уровень топлива. При создании новый = 0.0.
+    final currentFuel = widget.generator?.currentFuel ?? 0.0;
 
     final generator = GeneratorModel(
       id: widget.generator?.id,

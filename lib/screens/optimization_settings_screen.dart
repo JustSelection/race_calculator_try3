@@ -40,21 +40,24 @@ class _OptimizationSettingsScreenState extends State<OptimizationSettingsScreen>
           child: ListView(
             children: [
               const Text(
-                'Настройте лимиты для предупреждений о повышенной оптимизации.',
+                'Настройте лимиты списания как процент от фактического расхода топлива за период.',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 24),
               TextFormField(
                 controller: _weekController,
                 decoration: const InputDecoration(
-                  labelText: 'Недельный лимит (л/неделю)',
-                  hintText: 'Например: 50',
+                  labelText: 'Недельный лимит',
+                  hintText: 'Например: 10',
+                  suffixText: '%',
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (value) {
-                  if (value?.trim().isEmpty ?? true) return 'Введите недельный лимит';
+                  if (value?.trim().isEmpty ?? true) return 'Введите лимит';
                   final val = double.tryParse(value!);
-                  if (val == null || val <= 0) return 'Некорректное значение';
+                  if (val == null || val <= 0 || val > 100) {
+                    return 'Значение должно быть от 1 до 100';
+                  }
                   return null;
                 },
               ),
@@ -62,14 +65,17 @@ class _OptimizationSettingsScreenState extends State<OptimizationSettingsScreen>
               TextFormField(
                 controller: _monthController,
                 decoration: const InputDecoration(
-                  labelText: 'Месячный лимит (л/месяц)',
-                  hintText: 'Например: 150',
+                  labelText: 'Месячный лимит',
+                  hintText: 'Например: 15',
+                  suffixText: '%',
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (value) {
-                  if (value?.trim().isEmpty ?? true) return 'Введите месячный лимит';
+                  if (value?.trim().isEmpty ?? true) return 'Введите лимит';
                   final val = double.tryParse(value!);
-                  if (val == null || val <= 0) return 'Некорректное значение';
+                  if (val == null || val <= 0 || val > 100) {
+                    return 'Значение должно быть от 1 до 100';
+                  }
                   return null;
                 },
               ),
@@ -91,14 +97,6 @@ class _OptimizationSettingsScreenState extends State<OptimizationSettingsScreen>
     final weekLimit = double.parse(_weekController.text);
     final monthLimit = double.parse(_monthController.text);
 
-    if (monthLimit < weekLimit) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Месячный лимит должен быть >= недельного')),
-      );
-      return;
-    }
-
     final provider = context.read<OptimizationSettingsProvider>();
     final success = await provider.updateLimits(weekLimit, monthLimit);
 
@@ -107,7 +105,7 @@ class _OptimizationSettingsScreenState extends State<OptimizationSettingsScreen>
     if (success) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Настройки сохранены')),
+        const SnackBar(content: Text('Настройки процентов сохранены')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

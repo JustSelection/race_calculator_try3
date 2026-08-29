@@ -52,4 +52,13 @@ class OptimizationProvider extends ChangeNotifier {
     }
     return false;
   }
+
+  // 🆕 ДОБАВЛЕНО: Метод для полного сброса истории оптимизаций (используется при глобальной калибровке)
+  Future<void> clearOptimizations() async {
+    await _dao.deleteAll(); // Удаляем все записи из базы
+    _optimizations = [];    // Очищаем список в памяти
+    _weekSum = 0.0;         // Обнуляем недельную сумму
+    _monthSum = 0.0;        // Обнуляем месячную сумму
+    notifyListeners();      // Уведомляем интерфейс об изменениях
+  }
 }

@@ -7,6 +7,10 @@ import 'providers/calculator_provider.dart';
 import 'providers/generator_provider.dart';
 import 'providers/optimization_provider.dart';
 import 'providers/optimization_settings_provider.dart';
+import 'providers/refuel_provider.dart'; // 🆕 ДОБАВЛЕНО
+import 'providers/inventory_provider.dart'; // 🆕 ДОБАВЛЕНО
+import 'providers/calibration_provider.dart'; // 🆕 ДОБАВЛЕНО
+import 'providers/analytics_event_provider.dart'; // 🆕 ДОБАВЛЕНО
 import 'screens/calculator_screen.dart';
 import 'screens/cars_list_screen.dart';
 import 'screens/generators_list_screen.dart';
@@ -27,10 +31,14 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CarProvider()..loadCars()),
         ChangeNotifierProvider(create: (_) => TripProvider()),
         ChangeNotifierProvider(create: (_) => CalculatorProvider()),
-        // Новые провайдеры для агрегатов
         ChangeNotifierProvider(create: (_) => GeneratorProvider()..loadGenerators()),
         ChangeNotifierProvider(create: (_) => OptimizationProvider()),
         ChangeNotifierProvider(create: (_) => OptimizationSettingsProvider()..loadSettings()),
+        // 🆕 Новые провайдеры для расширенного функционала
+        ChangeNotifierProvider(create: (_) => RefuelProvider()),
+        ChangeNotifierProvider(create: (_) => InventoryProvider()),
+        ChangeNotifierProvider(create: (_) => CalibrationProvider()),
+        ChangeNotifierProvider(create: (_) => AnalyticsEventProvider()),
       ],
       child: MaterialApp(
         title: 'Калькулятор пробега',
@@ -58,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _screens = const [
     CalculatorScreen(),
     CarsListScreen(),
-    GeneratorsListScreen(), // Новый экран
+    GeneratorsListScreen(),
   ];
 
   @override
@@ -78,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Автомобили',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.build), // Иконка для агрегатов/оборудования
+            icon: Icon(Icons.build),
             label: 'Агрегаты',
           ),
         ],

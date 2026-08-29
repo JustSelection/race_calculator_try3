@@ -1,0 +1,114 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/generator_provider.dart';
+import '../providers/optimization_provider.dart';
+import '../providers/optimization_settings_provider.dart';
+import '../providers/refuel_provider.dart';
+import '../providers/inventory_provider.dart';
+import '../widgets/analytics_reset_button.dart'; // 🆕 Подключаем кнопку сброса
+
+class AnalyticsOptimizationTab extends StatelessWidget {
+  const AnalyticsOptimizationTab({super.key});
+
+  List<T> _filterLastDays<T>(List<T> items, DateTime Function(T) getDate, int days) {
+    final threshold = DateTime.now().subtract(Duration(days: days));
+    return items.where((item) => getDate(item).isAfter(threshold)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final generators = context.watch<GeneratorProvider>().generators;
+    final optimizations = context.watch<OptimizationProvider>().optimizations;
+    final refuels = context.watch<RefuelProvider>().refuels;
+    final inventories = context.watch<InventoryProvider>().inventories;
+    final settings = context.watch<OptimizationSettingsProvider>();
+
+    final weeklyRefuels = _filterLastDays(refuels, (r) => r.date, 7).fold(0.0, (sum, r) => sum + r.totalFuel);
+    final weeklyConsumption = _filterLastDays(inventories, (i) => i.date, 7).where((i) => i.difference < 0).fold(0.0, (sum, i) => sum + i.difference.abs());
+    final weeklyMovement = weeklyRefuels + weeklyConsumption;
+    final weeklyOptimized = _filterLastDays(optimizations, (o) => o.date, 7).fold(0.0, (sum, o) => sum + o.fuelAmount);
+    final weeklyAllowed = weeklyMovement * (settings.weekLimit / 100);
+    final weeklyRemaining = (weeklyAllowed - weeklyOptimized).clamp(0.0, weeklyAllowed);
+    final isWeekExceeded = weeklyOptimized > weeklyAllowed;
+
+    final monthlyRefuels = _filterLastDays(refuels, (r) => r.date, 30).fold(0.0, (sum, r) => sum + r.totalFuel);
+    final monthlyConsumption = _filterLastDays(inventories, (i) => i.date, 30).where((i) => i.difference < 0).fold(0.0, (sum, i) => sum + i.difference.abs());
+    final monthlyMovement = monthlyRefuels + monthlyConsumption;
+    final monthlyOptimized = _filterLastDays(optimizations, (o) => o.date, 30).fold(0.0, (sum, o) => sum + o.fuelAmount);
+    final monthlyAllowed = monthlyMovement * (settings.monthLimit / 100);
+    final monthlyRemaining = (monthlyAllowed - monthlyOptimized).clamp(0.0, monthlyAllowed);
+    final isMonthExceeded = monthlyOptimized > monthlyAllowed;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCard('Недельная оптимизация', weeklyMovement, weeklyOptimized, weeklyAllowed, weeklyRemaining, weeklyAllowed > 0 ? (weeklyOptimized / weeklyAllowed).clamp(0.0, 1.0) : 0.0, isWeekExceeded, settings.weekLimit),
+          const SizedBox(height: 16),
+          _buildCard('Месячная оптимизация', monthlyMovement, monthlyOptimized, monthlyAllowed, monthlyRemaining, monthlyAllowed > 0 ? (monthlyOptimized / monthlyAllowed).clamp(0.0, 1.0) : 0.0, isMonthExceeded, settings.monthLimit),
+          const SizedBox(height: 24),
+          const Text('Сводка по агрегатам', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          if (generators.isEmpty)
+            const Center(child: Text('Нет данных об агрегатах'))
+          else
+            ...generators.map((gen) {
+              final genOpt = optimizations.where((o) => o.generatorId == gen.id).fold(0.0, (sum, o) => sum + o.fuelAmount);
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(gen.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Остаток: ${gen.currentFuel} / ${gen.capacity} л'),
+                  trailing: Text('${genOpt.toStringAsFixed(1)} л', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                ),
+              );
+            }),
+          const SizedBox(height: 24),
+          const AnalyticsResetButton(), // 🆕 Кнопка ручного сброса аналитики
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard(String title, double movement, double optimized, double allowed, double remaining, double progress, bool isExceeded, double limitPercent) {
+    return Card(
+      color: isExceeded ? Colors.red.shade50 : Colors.green.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(isExceeded ? Icons.warning_amber_rounded : Icons.check_circle, color: isExceeded ? Colors.red : Colors.green, size: 28),
+                const SizedBox(width: 8),
+                Expanded(child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isExceeded ? Colors.red : Colors.green))),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('Факт. оборот: ${movement.toStringAsFixed(1)} л', style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text('Лимит ($limitPercent%): ${allowed.toStringAsFixed(1)} л', style: const TextStyle(color: Colors.grey)),
+            ]),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: progress, backgroundColor: Colors.grey.shade300, valueColor: AlwaysStoppedAnimation<Color>(isExceeded ? Colors.red : Colors.green), minHeight: 10),
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('Списано: ${optimized.toStringAsFixed(1)} л', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Можно списать: ${remaining.toStringAsFixed(1)} л', style: TextStyle(fontWeight: FontWeight.bold, color: isExceeded ? Colors.red : Colors.green)),
+            ]),
+            if (isExceeded) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(8)),
+                child: const Text('Совет: Объем списания превышает допустимые проценты от фактического оборота. Проверьте агрегаты.', style: TextStyle(fontSize: 13, color: Colors.red, fontWeight: FontWeight.w500)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
