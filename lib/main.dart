@@ -14,6 +14,8 @@ import 'providers/analytics_event_provider.dart'; // 🆕 ДОБАВЛЕНО
 import 'screens/calculator_screen.dart';
 import 'screens/cars_list_screen.dart';
 import 'screens/generators_list_screen.dart';
+import 'providers/transfer_fuel_provider.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +41,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => InventoryProvider()),
         ChangeNotifierProvider(create: (_) => CalibrationProvider()),
         ChangeNotifierProvider(create: (_) => AnalyticsEventProvider()),
+        ChangeNotifierProvider(create: (_) => TransferFuelProvider()),
       ],
       child: MaterialApp(
         title: 'Калькулятор пробега',

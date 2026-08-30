@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 import '../models/optimization_model.dart';
+import '../models/analytics_event_model.dart';
 import '../services/optimization_dao.dart';
+import '../services/analytics_event_dao.dart';
 
 class OptimizationProvider extends ChangeNotifier {
   final OptimizationDao _dao = OptimizationDao();
+  final AnalyticsEventDao _eventDao = AnalyticsEventDao();
   
   List<OptimizationModel> _optimizations = [];
   double _weekSum = 0.0;
@@ -36,6 +39,14 @@ class OptimizationProvider extends ChangeNotifier {
   Future<bool> addOptimization(OptimizationModel optimization) async {
     final id = await _dao.insert(optimization);
     if (id > 0) {
+      // 🆕 ИЗМЕНЕНО: Убрано слово "списано", оставлена только "Оптимизация"
+      await _eventDao.insert(AnalyticsEventModel(
+        type: 'optimization',
+        date: optimization.date,
+        description: 'Оптимизация: ${optimization.fuelAmount.toStringAsFixed(2)} л',
+        relatedId: optimization.generatorId,
+      ));
+
       await loadOptimizations();
       await loadAnalytics();
       return true;
@@ -53,12 +64,11 @@ class OptimizationProvider extends ChangeNotifier {
     return false;
   }
 
-  // 🆕 ДОБАВЛЕНО: Метод для полного сброса истории оптимизаций (используется при глобальной калибровке)
   Future<void> clearOptimizations() async {
-    await _dao.deleteAll(); // Удаляем все записи из базы
-    _optimizations = [];    // Очищаем список в памяти
-    _weekSum = 0.0;         // Обнуляем недельную сумму
-    _monthSum = 0.0;        // Обнуляем месячную сумму
-    notifyListeners();      // Уведомляем интерфейс об изменениях
+    await _dao.deleteAll();
+    _optimizations = [];
+    _weekSum = 0.0;
+    _monthSum = 0.0;
+    notifyListeners();
   }
 }

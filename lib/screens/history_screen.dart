@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/analytics_event_provider.dart';
+import '../models/analytics_event_model.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -24,10 +25,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _getTypeName(String type) {
     switch (type) {
       case 'refuel': return 'Заправка';
-      case 'inventory': return 'Работа агрегата'; // 🆕 ИЗМЕНЕНО
+      case 'inventory': return 'Работа агрегата';
       case 'optimization': return 'Оптимизация';
       case 'transfer': return 'Перелив';
-      case 'calibration': return 'Глобальная инвентаризация'; // 🆕 ИЗМЕНЕНО
+      case 'calibration': return 'Инвентаризация';
       default: return type;
     }
   }
@@ -35,10 +36,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   IconData _getTypeIcon(String type) {
     switch (type) {
       case 'refuel': return Icons.local_gas_station;
-      case 'inventory': return Icons.local_fire_department; // 🆕 ИЗМЕНЕНО: огонек
-      case 'optimization': return Icons.delete_outline;
+      case 'inventory': return Icons.local_fire_department;
+      case 'optimization': return Icons.trending_down; // 🆕 ИЗМЕНЕНО: стрелка вниз вместо мусорки
       case 'transfer': return Icons.swap_horiz;
-      case 'calibration': return Icons.inventory; // 🆕 ИЗМЕНЕНО: иконка инвентаря
+      case 'calibration': return Icons.inventory;
       default: return Icons.event;
     }
   }
@@ -46,7 +47,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Color _getTypeColor(String type) {
     switch (type) {
       case 'refuel': return Colors.green;
-      case 'inventory': return Colors.orange; // 🆕 ИЗМЕНЕНО: оранжевый для огонька
+      case 'inventory': return Colors.orange;
       case 'optimization': return Colors.red;
       case 'transfer': return Colors.blue;
       case 'calibration': return Colors.purple;
@@ -54,12 +55,46 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  void _showEventDetails(BuildContext context, AnalyticsEventModel event) {
+    final dateStr = DateFormat('dd.MM.yyyy HH:mm').format(event.date);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_getTypeName(event.type)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDetailRow('Дата', dateStr),
+            const SizedBox(height: 12),
+            _buildDetailRow('Описание', event.description),
+            if (event.relatedId != null) ...[
+              const SizedBox(height: 12),
+              _buildDetailRow('ID объекта', event.relatedId.toString()),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 100, child: Text('$label:', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500))),
+        Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold))),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final events = context.watch<AnalyticsEventProvider>().events;
-    final filtered = _filterType == null 
-        ? events 
-        : events.where((e) => e.type == _filterType).toList();
+    final filtered = _filterType == null ? events : events.where((e) => e.type == _filterType).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -71,10 +106,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
             itemBuilder: (context) => [
               const PopupMenuItem(value: null, child: Text('Все события')),
               const PopupMenuItem(value: 'refuel', child: Text('Заправки')),
-              const PopupMenuItem(value: 'inventory', child: Text('Работа агрегата')), // 🆕 ИЗМЕНЕНО
+              const PopupMenuItem(value: 'inventory', child: Text('Работа агрегата')),
               const PopupMenuItem(value: 'optimization', child: Text('Оптимизации')),
               const PopupMenuItem(value: 'transfer', child: Text('Переливы')),
-              const PopupMenuItem(value: 'calibration', child: Text('Глобальная инвентаризация')), // 🆕 ИЗМЕНЕНО
+              const PopupMenuItem(value: 'calibration', child: Text('Инвентаризации')),
             ],
           ),
         ],
@@ -87,15 +122,54 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final event = filtered[index];
                 final dateStr = DateFormat('dd.MM.yyyy HH:mm').format(event.date);
                 
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _getTypeColor(event.type),
-                      child: Icon(_getTypeIcon(event.type), color: Colors.white),
+                return Dismissible(
+                  key: Key(event.id.toString()),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    color: Colors.red,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20.0),
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  confirmDismiss: (direction) async {
+                    return await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Удалить событие?'),
+                        content: const Text('Вы уверены, что хотите удалить эту запись из журнала?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
+                    );
+                  },
+                  onDismissed: (direction) async {
+                    final provider = context.read<AnalyticsEventProvider>();
+                    final success = await provider.deleteEvent(event.id!);
+                    
+                    if (!mounted) return;
+
+                    if (success) {
+                      await provider.loadEvents(type: _filterType);
+                      if (!mounted) return;
+                      
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        const SnackBar(content: Text('Событие удалено')),
+                      );
+                    }
+                  },
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: ListTile(
+                      onTap: () => _showEventDetails(context, event),
+                      leading: CircleAvatar(
+                        backgroundColor: _getTypeColor(event.type),
+                        child: Icon(_getTypeIcon(event.type), color: Colors.white),
+                      ),
+                      title: Text(_getTypeName(event.type)),
+                      subtitle: Text('${event.description}\n$dateStr'),
                     ),
-                    title: Text(_getTypeName(event.type)),
-                    subtitle: Text('${event.description}\n$dateStr'),
                   ),
                 );
               },

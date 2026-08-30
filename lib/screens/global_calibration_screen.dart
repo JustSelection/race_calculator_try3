@@ -31,9 +31,9 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Внимание!'),
+        title: const Text('Подтверждение'),
         content: const Text(
-          'Глобальная инвентаризация принудительно изменит остатки топлива во всех агрегатах. '
+          'Проведение инвентаризации остатков принудительно изменит уровни топлива во всех агрегатах. '
           'Это действие также сбросит накопленную аналитику и лимиты оптимизации с текущего момента. '
           'Продолжить?',
         ),
@@ -44,8 +44,8 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
               Navigator.pop(ctx);
               _performCalibration();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Продолжить', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Провести', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -71,10 +71,10 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
       }
     }
 
-    // 🆕 ИЗМЕНЕНО: текст комментария для журнала событий
+    // 🆕 ИЗМЕНЕНО: текст комментария для журнала событий согласно задаче
     final calibration = CalibrationModel(
       date: _selectedDate,
-      comment: 'Глобальная инвентаризация остатков',
+      comment: 'Инвентаризация: полная инвентаризация остатков',
     );
 
     final success = await calProv.performCalibration(calibration, newFuelLevels);
@@ -89,7 +89,7 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
 
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Инвентаризация проведена. История агрегатов сброшена.')),
+        const SnackBar(content: Text('Инвентаризация проведена. История агрегатов обновлена.')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -104,7 +104,7 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
 
     return Scaffold(
       // 🆕 ИЗМЕНЕНО: Заголовок экрана
-      appBar: AppBar(title: const Text('Глобальная инвентаризация')),
+      appBar: AppBar(title: const Text('Инвентаризация')),
       body: Column(
         children: [
           Padding(
@@ -129,12 +129,15 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Text(
-              'Введите фактические остатки. Оставьте поле пустым, чтобы не менять значение.',
+              'Введите фактические остатки для проведения полной инвентаризации.',
               style: TextStyle(color: Colors.grey, fontSize: 14),
+              textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(height: 8),
-          CalibrationGeneratorList(generators: generators, controllers: _controllers),
+          Expanded(
+            child: CalibrationGeneratorList(generators: generators, controllers: _controllers),
+          ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: SizedBox(
@@ -144,7 +147,7 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.orange,
                 ),
-                child: const Text('Провести инвентаризацию', style: TextStyle(color: Colors.white)),
+                child: const Text('Провести инвентаризацию', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ),
           ),

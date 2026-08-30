@@ -29,7 +29,6 @@ class RefuelProvider extends ChangeNotifier {
   }
 
   Future<bool> addRefuel(RefuelModel refuel, Map<int, double> newLevels) async {
-    // 🛡️ ЗАЩИТА: Если карта пустая, прерываем выполнение, чтобы избежать ошибок
     if (newLevels.isEmpty) return false;
 
     _isLoading = true;
@@ -41,10 +40,8 @@ class RefuelProvider extends ChangeNotifier {
       final newRefuel = refuel.copyWith(id: id);
       _refuels.insert(0, newRefuel);
 
-      // Получаем текущие уровни агрегатов
       final generators = await _genDao.getAll();
       
-      // Считаем сколько было ДО заправки (ТОЛЬКО в тех агрегатах, которые меняем)
       double totalOldFuel = 0.0;
       for (final genId in newLevels.keys) {
         final gen = generators.firstWhere(
@@ -54,17 +51,21 @@ class RefuelProvider extends ChangeNotifier {
         totalOldFuel += gen.currentFuel;
       }
 
-      // Считаем сколько стало ПОСЛЕ (сумма новых уровней)
       double totalNewFuel = 0.0;
       for (final level in newLevels.values) {
         totalNewFuel += level;
       }
 
-      // Ожидаемая сумма: было + заправили
       final expectedTotal = totalOldFuel + refuel.totalFuel;
-      
-      // Расход = ожидаемое - фактическое
       final totalConsumption = expectedTotal - totalNewFuel;
+
+      // 🆕 ИСПРАВЛЕНО: Событие о заправке создается ОДИН РАЗ на весь чек, а не в цикле
+      await _eventDao.insert(AnalyticsEventModel(
+        type: 'refuel',
+        date: refuel.date,
+        description: 'Заправка: по чеку заправлено ${refuel.totalFuel} л',
+        relatedId: id,
+      ));
 
       // Обновляем уровни и записываем распределение
       for (final entry in newLevels.entries) {
@@ -78,31 +79,24 @@ class RefuelProvider extends ChangeNotifier {
         });
         
         await _genDao.updateFuel(genId, newLevel);
-
-        await _eventDao.insert(AnalyticsEventModel(
-          type: 'refuel',
-          date: refuel.date,
-          description: 'Заправка: уровень установлен на ${newLevel.toStringAsFixed(2)} л',
-          relatedId: genId,
-        ));
       }
 
-      // Если есть общий расход (положительное значение), записываем его в аналитику
+      // Если есть общий расход, записываем его ОДНИМ событием
       if (totalConsumption > 0.01) {
         final firstGenId = newLevels.keys.first;
         
         await _invDao.insert(InventoryModel(
           generatorId: firstGenId,
           date: refuel.date,
-          previousFuel: expectedTotal, // Примечание: это сумма по системе
-          actualFuel: totalNewFuel,    // Примечание: это сумма по системе
-          difference: -totalConsumption, // отрицательное = расход
+          previousFuel: expectedTotal,
+          actualFuel: totalNewFuel,
+          difference: -totalConsumption,
         ));
         
         await _eventDao.insert(AnalyticsEventModel(
-          type: 'inventory',
+          type: 'inventory', // Тип inventory, чтобы корректно считаться в аналитике как "Работа агрегата"
           date: refuel.date,
-          description: 'Расход при заправке: ${totalConsumption.toStringAsFixed(2)} л',
+          description: 'Работа агрегата: расход при заправке ${totalConsumption.toStringAsFixed(2)} л',
           relatedId: firstGenId,
         ));
       }
