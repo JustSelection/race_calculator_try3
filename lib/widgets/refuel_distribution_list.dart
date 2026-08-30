@@ -20,70 +20,82 @@ class RefuelDistributionList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Фильтрация списка для отображения
-    final filteredGens = selectedCarId == null || selectedCarId == -1
-        ? (selectedCarId == -1 ? allGenerators.where((g) => g.carId == null).toList() : allGenerators)
+    // Строгая фильтрация: показываем только агрегаты выбранного автомобиля
+    final filteredGens = selectedCarId == null
+        ? <GeneratorModel>[]
         : allGenerators.where((g) => g.carId == selectedCarId).toList();
+
+    // 🆕 ЗАЩИТА: Проверяем, что selectedCarId реально существует в списке cars
+    final safeInitialValue = cars.any((c) => c.id == selectedCarId) ? selectedCarId : null;
 
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: DropdownButtonFormField<int?>(
-            initialValue: selectedCarId,
+          child: DropdownButtonFormField<int>(
+            // 🆕 Ключ гарантирует перерисовку виджета при смене автомобиля, решая проблему реактивности initialValue
+            key: ValueKey(safeInitialValue),
+            initialValue: safeInitialValue, 
             decoration: const InputDecoration(
-              labelText: 'Фильтр по автомобилю',
+              labelText: 'Выберите автомобиль для заправки',
               border: OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
-            items: [
-              const DropdownMenuItem<int?>(value: null, child: Text('Все агрегаты')),
-              const DropdownMenuItem<int?>(value: -1, child: Text('Не привязанные')),
-              ...cars.map((car) => DropdownMenuItem<int?>(
-                    value: car.id,
-                    child: Text('${car.brand} (${car.licensePlate})'),
-                  )),
-            ],
+            hint: const Text('Выберите автомобиль'), // 🆕 Показывает подсказку, пока safeInitialValue == null
+            items: cars.map((car) => DropdownMenuItem<int>(
+                  value: car.id,
+                  child: Text('${car.brand} (${car.licensePlate})'),
+                )).toList(),
             onChanged: onCarFilterChanged,
+            validator: (value) => value == null ? 'Обязательно выберите автомобиль' : null,
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: filteredGens.length,
-            itemBuilder: (context, index) {
-              final gen = filteredGens[index];
-              // Гарантируем наличие контроллера для этого агрегата
-              if (!controllers.containsKey(gen.id)) {
-                // Примечание: обновление суммы должно происходить через callback или общий state, 
-                // но здесь мы полагаемся на то, что контроллеры инициализированы в родителе.
-                // Для простоты оставим доступ к существующему контроллеру.
-              }
-              final ctrl = controllers[gen.id!]!;
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: ListTile(
-                  title: Text(gen.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Было: ${gen.currentFuel} л / Макс: ${gen.capacity} л'),
-                  trailing: SizedBox(
-                    width: 100,
-                    child: TextFormField(
-                      controller: ctrl,
-                      decoration: const InputDecoration(labelText: 'Стало (л)', border: OutlineInputBorder()),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (value) {
-                        final val = double.tryParse(value ?? '');
-                        if (val == null) return 'Число';
-                        if (val < 0) return '>= 0';
-                        if (val > gen.capacity) return '<= ${gen.capacity}';
-                        return null;
-                      },
+          child: filteredGens.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Text(
+                      selectedCarId == null
+                          ? 'Пожалуйста, выберите автомобиль из списка выше, чтобы начать распределение.'
+                          : 'К выбранному автомобилю не привязано ни одного агрегата.\n\nВесь объем заправки будет автоматически учтен как расход (работа агрегатов).',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
                     ),
                   ),
+                )
+              : ListView.builder(
+                  itemCount: filteredGens.length,
+                  itemBuilder: (context, index) {
+                    final gen = filteredGens[index];
+                    final ctrl = controllers[gen.id!];
+
+                    if (ctrl == null) return const SizedBox.shrink();
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        title: Text(gen.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Было: ${gen.currentFuel} л / Макс: ${gen.capacity} л'),
+                        trailing: SizedBox(
+                          width: 100,
+                          child: TextFormField(
+                            controller: ctrl,
+                            decoration: const InputDecoration(labelText: 'Стало (л)', border: OutlineInputBorder()),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (value) {
+                              final val = double.tryParse(value ?? '');
+                              if (val == null) return 'Число';
+                              if (val < 0) return '>= 0';
+                              if (val > gen.capacity) return '<= ${gen.capacity}';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ],
     );

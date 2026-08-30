@@ -29,8 +29,9 @@ class RefuelProvider extends ChangeNotifier {
   }
 
   Future<bool> addRefuel(RefuelModel refuel, Map<int, double> newLevels) async {
-    if (newLevels.isEmpty) return false;
-
+    // 🆕 ИЗМЕНЕНО: Убрали блокировку. Теперь разрешаем пустой newLevels 
+    // (если к авто не привязаны агрегаты, весь объем по чеку идет в расход).
+    
     _isLoading = true;
     notifyListeners();
     try {
@@ -59,7 +60,7 @@ class RefuelProvider extends ChangeNotifier {
       final expectedTotal = totalOldFuel + refuel.totalFuel;
       final totalConsumption = expectedTotal - totalNewFuel;
 
-      // 🆕 ИСПРАВЛЕНО: Событие о заправке создается ОДИН РАЗ на весь чек, а не в цикле
+      // Событие о заправке создается ОДИН РАЗ на весь чек
       await _eventDao.insert(AnalyticsEventModel(
         type: 'refuel',
         date: refuel.date,
@@ -67,7 +68,7 @@ class RefuelProvider extends ChangeNotifier {
         relatedId: id,
       ));
 
-      // Обновляем уровни и записываем распределение
+      // Обновляем уровни и записываем распределение (цикл просто пропустится, если newLevels пуст)
       for (final entry in newLevels.entries) {
         final genId = entry.key;
         final newLevel = entry.value;
@@ -83,10 +84,12 @@ class RefuelProvider extends ChangeNotifier {
 
       // Если есть общий расход, записываем его ОДНИМ событием
       if (totalConsumption > 0.01) {
-        final firstGenId = newLevels.keys.first;
+        // 🆕 ИЗМЕНЕНО: Безопасное получение ID. Если агрегатов нет, используем -1 
+        // как маркер "общий расход автомобиля без привязки к конкретному агрегату".
+        final targetGenId = newLevels.isNotEmpty ? newLevels.keys.first : -1;
         
         await _invDao.insert(InventoryModel(
-          generatorId: firstGenId,
+          generatorId: targetGenId,
           date: refuel.date,
           previousFuel: expectedTotal,
           actualFuel: totalNewFuel,
@@ -94,10 +97,10 @@ class RefuelProvider extends ChangeNotifier {
         ));
         
         await _eventDao.insert(AnalyticsEventModel(
-          type: 'inventory', // Тип inventory, чтобы корректно считаться в аналитике как "Работа агрегата"
+          type: 'inventory',
           date: refuel.date,
           description: 'Работа агрегата: расход при заправке ${totalConsumption.toStringAsFixed(2)} л',
-          relatedId: firstGenId,
+          relatedId: targetGenId,
         ));
       }
       
@@ -105,6 +108,7 @@ class RefuelProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('Ошибка при добавлении заправки: $e');
       _isLoading = false;
       notifyListeners();
       return false;

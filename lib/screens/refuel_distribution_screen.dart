@@ -7,7 +7,7 @@ import '../providers/generator_provider.dart';
 import '../providers/refuel_provider.dart';
 import '../providers/optimization_provider.dart';
 import '../providers/inventory_provider.dart';
-import '../providers/analytics_event_provider.dart'; // 🆕 ДОБАВЛЕНО
+import '../providers/analytics_event_provider.dart';
 import '../widgets/refuel_distribution_header.dart';
 import '../widgets/refuel_distribution_list.dart';
 
@@ -31,7 +31,6 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
   final _formKey = GlobalKey<FormState>();
   final Map<int, TextEditingController> _controllers = {};
   double _newTotalSum = 0.0;
-  bool _isInitialized = false;
   int? _selectedCarId;
 
   @override
@@ -50,16 +49,16 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
     setState(() => _newTotalSum = double.parse(sum.toStringAsFixed(2)));
   }
 
-  void _initControllers(List<GeneratorModel> generators) {
-    if (_isInitialized) return;
-    for (final gen in generators) {
-      if (!_controllers.containsKey(gen.id)) {
+  void _initControllersForCar(List<GeneratorModel> allGenerators, int? carId) {
+    _controllers.clear();
+    if (carId != null) {
+      final carGens = allGenerators.where((g) => g.carId == carId).toList();
+      for (final gen in carGens) {
         _controllers[gen.id!] = TextEditingController(text: gen.currentFuel.toString())
           ..addListener(_updateSum);
       }
     }
     _updateSum();
-    _isInitialized = true;
   }
 
   double _round(double value) => double.parse(value.toStringAsFixed(2));
@@ -70,7 +69,8 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
     final generators = context.read<GeneratorProvider>().generators;
     final Map<int, double> newLevels = {};
     
-    for (final gen in generators) {
+    final carGens = generators.where((g) => g.carId == _selectedCarId).toList();
+    for (final gen in carGens) {
       final ctrl = _controllers[gen.id];
       if (ctrl != null && ctrl.text.isNotEmpty) {
         newLevels[gen.id!] = double.parse(ctrl.text);
@@ -91,12 +91,12 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
       final genProv = context.read<GeneratorProvider>();
       final optProv = context.read<OptimizationProvider>();
       final invProv = context.read<InventoryProvider>();
-      final eventProv = context.read<AnalyticsEventProvider>(); // 🆕 ПОЛУЧАЕМ ПРОВАЙДЕР СОБЫТИЙ
+      final eventProv = context.read<AnalyticsEventProvider>();
       
       await genProv.loadGenerators();
       await optProv.loadAnalytics();
       await invProv.loadInventories();
-      await eventProv.loadEvents(); // 🆕 ПРИНУДИТЕЛЬНО обновляем события для мгновенного отображения в аналитике
+      await eventProv.loadEvents();
 
       if (!mounted) return;
 
@@ -117,11 +117,9 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
   Widget build(BuildContext context) {
     final generators = context.watch<GeneratorProvider>().generators;
     final cars = context.watch<CarProvider>().cars;
-    
-    _initControllers(generators);
 
-    final filteredGens = _selectedCarId == null || _selectedCarId == -1
-        ? (_selectedCarId == -1 ? generators.where((g) => g.carId == null).toList() : generators)
+    final filteredGens = _selectedCarId == null 
+        ? <GeneratorModel>[] 
         : generators.where((g) => g.carId == _selectedCarId).toList();
 
     final oldTotal = _round(filteredGens.fold(0.0, (sum, g) => sum + g.currentFuel));
@@ -139,13 +137,36 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
               expectedTotal: expectedTotal, 
               newTotalSum: _newTotalSum
             ),
+            
+            if (_selectedCarId != null && filteredGens.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                color: Colors.orange.shade100,
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'К этому автомобилю не привязано агрегатов. Весь объем заправки (${widget.totalFuel} л) будет учтен как расход (работа агрегатов).',
+                        style: const TextStyle(color: Colors.black87, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Expanded(
               child: RefuelDistributionList(
                 allGenerators: generators,
                 cars: cars,
                 selectedCarId: _selectedCarId,
                 controllers: _controllers,
-                onCarFilterChanged: (value) => setState(() => _selectedCarId = value),
+                onCarFilterChanged: (value) {
+                  _initControllersForCar(generators, value);
+                  setState(() => _selectedCarId = value);
+                },
               ),
             ),
             Padding(
@@ -153,9 +174,19 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _saveRefuel,
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                  child: const Text('Сохранить фактические уровни'),
+                  onPressed: _selectedCarId == null ? null : _saveRefuel,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    // 🆕 ИЗМЕНЕНО: Явно задаем яркий синий цвет для активной кнопки
+                    backgroundColor: _selectedCarId == null ? Colors.grey.shade300 : Colors.blue,
+                    foregroundColor: _selectedCarId == null ? Colors.grey.shade600 : Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade300,
+                    disabledForegroundColor: Colors.grey.shade600,
+                  ),
+                  child: Text(
+                    _selectedCarId == null ? 'Сначала выберите автомобиль' : 'Сохранить фактические уровни',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), // 🆕 Жирный шрифт для заметности
+                  ),
                 ),
               ),
             ),

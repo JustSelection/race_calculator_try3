@@ -74,7 +74,7 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
     // 🆕 ИЗМЕНЕНО: текст комментария для журнала событий согласно задаче
     final calibration = CalibrationModel(
       date: _selectedDate,
-      comment: 'Инвентаризация: полная инвентаризация остатков',
+      comment: 'полная инвентаризация остатков',
     );
 
     final success = await calProv.performCalibration(calibration, newFuelLevels);
