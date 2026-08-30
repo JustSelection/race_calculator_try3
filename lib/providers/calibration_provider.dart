@@ -24,31 +24,31 @@ class CalibrationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Проводит глобальную калибровку: сбрасывает топливо во всех агрегатах
-  /// и записывает событие в аналитику
   Future<bool> performCalibration(
       CalibrationModel calibration,
-      Map<int, double> newFuelLevels) async { // generatorId -> newFuelLevel
+      Map<int, double> newFuelLevels) async {
     _isLoading = true;
     notifyListeners();
     try {
-      // 1. Сохраняем запись о калибровке
       final id = await _dao.insert(calibration);
       if (id <= 0) return false;
 
       final newCalibration = calibration.copyWith(id: id);
       _calibrations.insert(0, newCalibration);
 
-      // 2. Обновляем уровни топлива во всех агрегатах
       for (final entry in newFuelLevels.entries) {
         await _genDao.updateFuel(entry.key, entry.value);
       }
 
-      // 3. Записываем событие в аналитику
+      // 🆕 ИЗМЕНЕНО: Принудительно убираем слово "Калибровка" из комментария
+      final cleanComment = calibration.comment
+          .replaceAll(RegExp(r'Калибровка:\s*', caseSensitive: false), '')
+          .trim();
+
       await _eventDao.insert(AnalyticsEventModel(
         type: 'calibration',
         date: calibration.date,
-        description: 'Калибровка: ${calibration.comment}',
+        description: 'Инвентаризация: $cleanComment',
       ));
 
       _isLoading = false;

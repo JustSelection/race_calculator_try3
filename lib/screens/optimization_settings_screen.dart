@@ -40,7 +40,7 @@ class _OptimizationSettingsScreenState extends State<OptimizationSettingsScreen>
           child: ListView(
             children: [
               const Text(
-                'Настройте лимиты списания как процент от фактического расхода топлива за период.',
+                'Настройте лимиты оптимизации как процент от фактического расхода топлива за период.',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 24),

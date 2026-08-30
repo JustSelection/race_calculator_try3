@@ -26,7 +26,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     switch (type) {
       case 'refuel': return 'Заправка';
       case 'inventory': return 'Работа агрегата';
-      case 'optimization': return 'Оптимизация';
       case 'transfer': return 'Перелив';
       case 'calibration': return 'Инвентаризация';
       default: return type;
@@ -37,7 +36,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     switch (type) {
       case 'refuel': return Icons.local_gas_station;
       case 'inventory': return Icons.local_fire_department;
-      case 'optimization': return Icons.trending_down; // 🆕 ИЗМЕНЕНО: стрелка вниз вместо мусорки
       case 'transfer': return Icons.swap_horiz;
       case 'calibration': return Icons.inventory;
       default: return Icons.event;
@@ -48,7 +46,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     switch (type) {
       case 'refuel': return Colors.green;
       case 'inventory': return Colors.orange;
-      case 'optimization': return Colors.red;
       case 'transfer': return Colors.blue;
       case 'calibration': return Colors.purple;
       default: return Colors.grey;
@@ -68,10 +65,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             _buildDetailRow('Дата', dateStr),
             const SizedBox(height: 12),
             _buildDetailRow('Описание', event.description),
-            if (event.relatedId != null) ...[
-              const SizedBox(height: 12),
-              _buildDetailRow('ID объекта', event.relatedId.toString()),
-            ],
           ],
         ),
         actions: [
@@ -91,15 +84,49 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  Future<void> _clearAllEvents() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Очистить журнал?'),
+        content: const Text('Вы уверены, что хотите удалить ВСЕ события из журнала? Это действие необратимо и повлияет на статистику.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Очистить', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final provider = context.read<AnalyticsEventProvider>();
+      await provider.clearAllEvents(); 
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Журнал событий полностью очищен')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final events = context.watch<AnalyticsEventProvider>().events;
-    final filtered = _filterType == null ? events : events.where((e) => e.type == _filterType).toList();
+    
+    //  ИЗМЕНЕНО: Исключаем события типа 'optimization' из журнала событий
+    final nonOptimizationEvents = events.where((e) => e.type != 'optimization').toList();
+    final filtered = _filterType == null 
+        ? nonOptimizationEvents 
+        : nonOptimizationEvents.where((e) => e.type == _filterType).toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Журнал событий'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_forever, color: Colors.red),
+            tooltip: 'Очистить весь журнал',
+            onPressed: _clearAllEvents,
+          ),
           PopupMenuButton<String?>(
             icon: const Icon(Icons.filter_list),
             onSelected: (value) => setState(() => _filterType = value),
@@ -107,7 +134,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
               const PopupMenuItem(value: null, child: Text('Все события')),
               const PopupMenuItem(value: 'refuel', child: Text('Заправки')),
               const PopupMenuItem(value: 'inventory', child: Text('Работа агрегата')),
-              const PopupMenuItem(value: 'optimization', child: Text('Оптимизации')),
               const PopupMenuItem(value: 'transfer', child: Text('Переливы')),
               const PopupMenuItem(value: 'calibration', child: Text('Инвентаризации')),
             ],

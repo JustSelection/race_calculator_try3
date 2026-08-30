@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/optimization_model.dart';
-import '../models/car_model.dart';
 import '../providers/generator_provider.dart';
 import '../providers/optimization_provider.dart';
-import '../providers/car_provider.dart';
+import '../widgets/optimization_history_list_item.dart';
 
 enum HistoryFilter { all, week, month }
 
@@ -17,6 +16,7 @@ class OptimizationHistoryScreen extends StatefulWidget {
 
 class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
   HistoryFilter _filter = HistoryFilter.all;
+  bool _isAscending = false; // false = новые сверху (по умолчанию)
 
   @override
   void initState() {
@@ -26,18 +26,28 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
     });
   }
 
-  List<OptimizationModel> _applyFilter(List<OptimizationModel> items) {
+  List<OptimizationModel> _applyFilterAndSort(List<OptimizationModel> items) {
     final now = DateTime.now();
+    List<OptimizationModel> filtered;
+    
     switch (_filter) {
       case HistoryFilter.week:
         final weekAgo = now.subtract(const Duration(days: 7));
-        return items.where((i) => i.date.isAfter(weekAgo)).toList();
+        filtered = items.where((i) => i.date.isAfter(weekAgo)).toList();
+        break;
       case HistoryFilter.month:
         final monthAgo = now.subtract(const Duration(days: 30));
-        return items.where((i) => i.date.isAfter(monthAgo)).toList();
+        filtered = items.where((i) => i.date.isAfter(monthAgo)).toList();
+        break;
       default:
-        return items;
+        filtered = items;
     }
+
+    filtered.sort((a, b) => _isAscending 
+        ? a.date.compareTo(b.date) 
+        : b.date.compareTo(a.date));
+        
+    return filtered;
   }
 
   String _getGeneratorName(List<dynamic> generators, int genId) {
@@ -47,37 +57,39 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
     return 'Удаленный агрегат';
   }
 
-  String _getCarInfo(List<Car> cars, int? carId) {
-    if (carId == null) return 'Не привязан';
-    final car = cars.firstWhere(
-      (c) => c.id == carId,
-      orElse: () => Car(
-        id: -1, brand: 'Неизвестно', licensePlate: '',
-        fuelConsumption: 0, currentMileage: 0, fuelInTank: 0, tankCapacity: 0,
-      ),
-    );
-    return '${car.brand} (${car.licensePlate})';
-  }
-
   @override
   Widget build(BuildContext context) {
     final optProv = context.watch<OptimizationProvider>();
     final genProv = context.watch<GeneratorProvider>();
-    final filtered = _applyFilter(optProv.optimizations);
+    final filtered = _applyFilterAndSort(optProv.optimizations);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('История оптимизаций')),
+      appBar: AppBar(
+        title: const Text('История оптимизаций'),
+        actions: [
+          IconButton(
+            icon: Icon(_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
+            tooltip: _isAscending ? 'Сначала старые' : 'Сначала новые',
+            onPressed: () => setState(() => _isAscending = !_isAscending),
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            color: Colors.white,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: HistoryFilter.values.map((f) {
                 final label = f == HistoryFilter.all ? 'Все' : f == HistoryFilter.week ? 'Неделя' : 'Месяц';
-                return ChoiceChip(
-                  label: Text(label),
+                return FilterChip(
+                  label: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
                   selected: _filter == f,
+                  showCheckmark: false,
+                  selectedColor: Colors.blue.shade100,
+                  checkmarkColor: Colors.blue.shade700,
+                  side: BorderSide(color: _filter == f ? Colors.blue.shade700 : Colors.grey.shade300),
                   onSelected: (sel) {
                     if (sel) setState(() => _filter = f);
                   },
@@ -85,107 +97,35 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
               }).toList(),
             ),
           ),
+          const Divider(height: 1),
+          
           Expanded(
             child: filtered.isEmpty
-                ? const Center(child: Text('Нет записей за выбранный период'))
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text('Нет записей за выбранный период', style: TextStyle(color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: filtered.length,
                     itemBuilder: (ctx, i) {
                       final opt = filtered[i];
                       final genName = _getGeneratorName(genProv.generators, opt.generatorId);
-                      final dateStr = '${opt.date.day.toString().padLeft(2, '0')}.${opt.date.month.toString().padLeft(2, '0')}.${opt.date.year}';
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: ListTile(
-                          onTap: () => _showDetails(context, opt, genName, genProv.generators),
-                          title: Text('$genName — ${opt.fuelAmount.toStringAsFixed(2)} л'),
-                          subtitle: Text(
-                            '$dateStr\n${opt.comment}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmDelete(context, optProv, opt.id!),
-                          ),
-                        ),
+                      return OptimizationHistoryListItem(
+                        opt: opt,
+                        genName: genName,
+                        generators: genProv.generators,
+                        onDelete: () => _confirmDelete(context, optProv, opt.id!),
                       );
                     },
                   ),
           ),
-        ],
-      ),
-    );
-  }
-
-  void _showDetails(BuildContext context, OptimizationModel opt, String genName, List<dynamic> generators) {
-    final dateStr =
-        '${opt.date.day.toString().padLeft(2, '0')}.'
-        '${opt.date.month.toString().padLeft(2, '0')}.'
-        '${opt.date.year} '
-        '${opt.date.hour.toString().padLeft(2, '0')}:'
-        '${opt.date.minute.toString().padLeft(2, '0')}';
-
-    // Получаем текущую привязку агрегата к автомобилю
-    dynamic gen;
-    try {
-      gen = generators.firstWhere((g) => g.id == opt.generatorId);
-    } catch (_) {
-      gen = null;
-    }
-    final cars = context.read<CarProvider>().cars;
-    final carInfo = gen != null ? _getCarInfo(cars, gen.carId) : 'Агрегат удалён';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.75,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Сводка списания', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const Divider(),
-              _detailRow('Агрегат', genName),
-              _detailRow('Автомобиль', carInfo),
-              _detailRow('Дата', dateStr),
-              _detailRow('Списано', '${opt.fuelAmount.toStringAsFixed(2)} л'),
-              const SizedBox(height: 8),
-              const Text('Комментарий:', style: TextStyle(color: Colors.grey)),
-              const SizedBox(height: 4),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Text(
-                    opt.comment,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 110, child: Text('$label:', style: const TextStyle(color: Colors.grey))),
-          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
         ],
       ),
     );
@@ -196,10 +136,10 @@ class _OptimizationHistoryScreenState extends State<OptimizationHistoryScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить запись?'),
-        content: const Text('Запись будет удалена из истории. Топливо в агрегат НЕ вернется.'),
+        content: const Text('Запись будет удалена из истории оптимизаций. Топливо в агрегат НЕ вернется.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
         ],
       ),
     );

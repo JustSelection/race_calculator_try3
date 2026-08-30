@@ -32,7 +32,7 @@ class GeneratorMenuBuilder extends StatelessWidget {
         ),
         const PopupMenuItem(
           value: 'history',
-          child: Row(children: [Icon(Icons.history, size: 20), SizedBox(width: 8), Text('История оптимизаций')]),
+          child: Row(children: [Icon(Icons.trending_down, size: 20), SizedBox(width: 8), Text('История оптимизаций')]), // 🆕 ИЗМЕНЕНО: иконка стрелки вниз
         ),
         const PopupMenuItem(
           value: 'settings',

@@ -144,7 +144,7 @@ class AnalyticsOptimizationTab extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(8)),
                 child: const Text(
-                  'Совет: Объем оптимизации превышает допустимые проценты от фактического расхода. Проверьте агрегаты.', 
+                  'Совет: Объем оптимизации превышает допустимый лимит от фактического расхода.', 
                   style: TextStyle(fontSize: 13, color: Colors.red, fontWeight: FontWeight.w500),
                   softWrap: true,
                 ),

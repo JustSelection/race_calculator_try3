@@ -53,4 +53,14 @@ class AnalyticsEventDao {
       return -1;
     }
   }
+
+  // 🆕 ДОБАВЛЕНО: Метод для удаления всех событий из таблицы
+  Future<int> deleteAll() async {
+    try {
+      final db = await _dbHelper.database;
+      return await db.delete('analytics_events');
+    } catch (e) {
+      return -1;
+    }
+  }
 }

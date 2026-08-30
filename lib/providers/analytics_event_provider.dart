@@ -38,4 +38,11 @@ class AnalyticsEventProvider extends ChangeNotifier {
     }
     return false;
   }
+
+  // 🆕 ДОБАВЛЕНО: Метод для полной очистки всех событий в журнале
+  Future<void> clearAllEvents() async {
+    await _dao.deleteAll(); // Удаляет все записи из таблицы событий
+    _events = [];           // Очищаем список в памяти
+    notifyListeners();      // Уведомляем интерфейс об изменениях
+  }
 }

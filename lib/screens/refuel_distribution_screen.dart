@@ -6,7 +6,8 @@ import '../providers/car_provider.dart';
 import '../providers/generator_provider.dart';
 import '../providers/refuel_provider.dart';
 import '../providers/optimization_provider.dart';
-import '../providers/inventory_provider.dart'; // 🆕 Добавлено
+import '../providers/inventory_provider.dart';
+import '../providers/analytics_event_provider.dart'; // 🆕 ДОБАВЛЕНО
 import '../widgets/refuel_distribution_header.dart';
 import '../widgets/refuel_distribution_list.dart';
 
@@ -89,11 +90,13 @@ class _RefuelDistributionScreenState extends State<RefuelDistributionScreen> {
     if (success) {
       final genProv = context.read<GeneratorProvider>();
       final optProv = context.read<OptimizationProvider>();
-      final invProv = context.read<InventoryProvider>(); // 🆕 Получаем провайдер инвентаризации
+      final invProv = context.read<InventoryProvider>();
+      final eventProv = context.read<AnalyticsEventProvider>(); // 🆕 ПОЛУЧАЕМ ПРОВАЙДЕР СОБЫТИЙ
       
       await genProv.loadGenerators();
       await optProv.loadAnalytics();
-      await invProv.loadInventories(); // 🆕 ПРИНУДИТЕЛЬНО обновляем список инвентаризаций
+      await invProv.loadInventories();
+      await eventProv.loadEvents(); // 🆕 ПРИНУДИТЕЛЬНО обновляем события для мгновенного отображения в аналитике
 
       if (!mounted) return;
 

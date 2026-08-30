@@ -40,19 +40,23 @@ void showGeneratorsActionsBottomSheet(BuildContext context) {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.trending_down, color: Colors.blue),
-            title: const Text('Оптимизация'),
-            onTap: () {
-              Navigator.pop(ctx);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const OptimizationScreen()));
-            },
-          ),
-          ListTile(
             leading: const Icon(Icons.inventory, color: Colors.blue),
             title: const Text('Инвентаризация'),
             onTap: () {
               Navigator.pop(ctx);
               Navigator.push(context, MaterialPageRoute(builder: (_) => const GlobalCalibrationScreen()));
+            },
+          ),
+          
+          // 🆕 ДОБАВЛЕНО: Горизонтальная черта для визуального отделения оптимизации
+          const Divider(height: 1), 
+          
+          ListTile(
+            leading: const Icon(Icons.trending_down, color: Colors.blue),
+            title: const Text('Оптимизация'),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const OptimizationScreen()));
             },
           ),
           const Divider(height: 1),
