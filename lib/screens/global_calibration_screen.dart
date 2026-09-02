@@ -6,6 +6,7 @@ import '../providers/generator_provider.dart';
 import '../providers/calibration_provider.dart';
 import '../providers/optimization_provider.dart';
 import '../providers/inventory_provider.dart';
+import '../providers/car_provider.dart';
 import '../widgets/calibration_generator_list.dart';
 
 class GlobalCalibrationScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class GlobalCalibrationScreen extends StatefulWidget {
 class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
   final Map<int, TextEditingController> _controllers = {};
   DateTime _selectedDate = DateTime.now();
+  int? _selectedCarId; 
 
   @override
   void dispose() {
@@ -71,7 +73,6 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
       }
     }
 
-    // 🆕 ИЗМЕНЕНО: текст комментария для журнала событий согласно задаче
     final calibration = CalibrationModel(
       date: _selectedDate,
       comment: 'полная инвентаризация остатков',
@@ -101,12 +102,46 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
   @override
   Widget build(BuildContext context) {
     final generators = context.watch<GeneratorProvider>().generators;
+    final cars = context.watch<CarProvider>().cars;
+
+    final filteredGenerators = _selectedCarId == null
+        ? generators
+        : _selectedCarId == -1
+            ? generators.where((g) => g.carId == null).toList()
+            : generators.where((g) => g.carId == _selectedCarId).toList();
 
     return Scaffold(
-      // 🆕 ИЗМЕНЕНО: Заголовок экрана
       appBar: AppBar(title: const Text('Инвентаризация')),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: DropdownButtonFormField<int>(
+              key: ValueKey(_selectedCarId),
+              initialValue: _selectedCarId,
+              decoration: const InputDecoration(
+                labelText: 'Фильтр по автомобилю',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              hint: const Text('Все агрегаты'),
+              items: [
+                const DropdownMenuItem<int>(value: null, child: Text('Все агрегаты')),
+                const DropdownMenuItem<int>(value: -1, child: Text('Не привязанные')),
+                // 🆕 ИСПРАВЛЕНО: убран лишний .toList() внутри spread-оператора
+                ...cars.map((car) => DropdownMenuItem<int>(
+                      value: car.id,
+                      child: Text('${car.brand} (${car.licensePlate})'),
+                    )),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedCarId = value;
+                });
+              },
+            ),
+          ),
+
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: InkWell(
@@ -126,6 +161,7 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
               ),
             ),
           ),
+          
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Text(
@@ -135,15 +171,27 @@ class _GlobalCalibrationScreenState extends State<GlobalCalibrationScreen> {
             ),
           ),
           const SizedBox(height: 8),
+          
           Expanded(
-            child: CalibrationGeneratorList(generators: generators, controllers: _controllers),
+            child: filteredGenerators.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Нет агрегатов для выбранного фильтра.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : CalibrationGeneratorList(
+                    generators: filteredGenerators,
+                    controllers: _controllers,
+                  ),
           ),
+          
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: generators.isEmpty ? null : _showWarningAndSave,
+                onPressed: filteredGenerators.isEmpty ? null : _showWarningAndSave,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.orange,
                 ),
