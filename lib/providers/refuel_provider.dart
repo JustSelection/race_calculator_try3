@@ -29,9 +29,6 @@ class RefuelProvider extends ChangeNotifier {
   }
 
   Future<bool> addRefuel(RefuelModel refuel, Map<int, double> newLevels) async {
-    // 🆕 ИЗМЕНЕНО: Убрали блокировку. Теперь разрешаем пустой newLevels 
-    // (если к авто не привязаны агрегаты, весь объем по чеку идет в расход).
-    
     _isLoading = true;
     notifyListeners();
     try {
@@ -60,32 +57,48 @@ class RefuelProvider extends ChangeNotifier {
       final expectedTotal = totalOldFuel + refuel.totalFuel;
       final totalConsumption = expectedTotal - totalNewFuel;
 
-      // Событие о заправке создается ОДИН РАЗ на весь чек
-      await _eventDao.insert(AnalyticsEventModel(
-        type: 'refuel',
-        date: refuel.date,
-        description: 'Заправка: по чеку заправлено ${refuel.totalFuel} л',
-        relatedId: id,
-      ));
+      // 🆕 ИЗМЕНЕНО: Создаем события заправки для каждого агрегата отдельно.
+      // Мы используем relatedId как generatorId, чтобы не менять структуру БД, 
+      // и это позволит фильтровать статистику заправок по автомобилю!
+      if (newLevels.isEmpty) {
+        await _eventDao.insert(AnalyticsEventModel(
+          type: 'refuel',
+          date: refuel.date,
+          description: 'Заправка (без привязки): по чеку заправлено ${refuel.totalFuel} л',
+          relatedId: -1, // Маркер "без привязки к агрегату"
+        ));
+      } else {
+        for (final entry in newLevels.entries) {
+          final genId = entry.key;
+          final newLevel = entry.value;
+          
+          final gen = generators.firstWhere(
+            (g) => g.id == genId,
+            orElse: () => GeneratorModel(name: 'Неизвестный', capacity: 0, currentFuel: 0, carId: null),
+          );
+          
+          final fuelAdded = newLevel - gen.currentFuel;
+          if (fuelAdded > 0) {
+            await _eventDao.insert(AnalyticsEventModel(
+              type: 'refuel',
+              date: refuel.date,
+              description: 'Заправка ${gen.name}: по чеку заправлено ${fuelAdded.toStringAsFixed(2)} л',
+              relatedId: genId, // 🆕 Теперь relatedId хранит ID агрегата для фильтрации!
+            ));
+          }
 
-      // Обновляем уровни и записываем распределение (цикл просто пропустится, если newLevels пуст)
-      for (final entry in newLevels.entries) {
-        final genId = entry.key;
-        final newLevel = entry.value;
-
-        await _dao.insertDistribution({
-          'refuelId': id,
-          'generatorId': genId,
-          'fuelAmount': newLevel,
-        });
-        
-        await _genDao.updateFuel(genId, newLevel);
+          await _dao.insertDistribution({
+            'refuelId': id,
+            'generatorId': genId,
+            'fuelAmount': newLevel,
+          });
+          
+          await _genDao.updateFuel(genId, newLevel);
+        }
       }
 
       // Если есть общий расход, записываем его ОДНИМ событием
       if (totalConsumption > 0.01) {
-        // 🆕 ИЗМЕНЕНО: Безопасное получение ID. Если агрегатов нет, используем -1 
-        // как маркер "общий расход автомобиля без привязки к конкретному агрегату".
         final targetGenId = newLevels.isNotEmpty ? newLevels.keys.first : -1;
         
         await _invDao.insert(InventoryModel(

@@ -5,10 +5,16 @@ import '../providers/optimization_provider.dart';
 import '../providers/optimization_settings_provider.dart';
 import '../providers/inventory_provider.dart';
 import '../widgets/analytics_reset_button.dart';
-import 'refuel_stats_card.dart'; // 🆕 ДОБАВЛЕНО
+import 'refuel_stats_card.dart';
 
 class AnalyticsOptimizationTab extends StatelessWidget {
-  const AnalyticsOptimizationTab({super.key});
+  // 🆕 ДОБАВЛЕНО: параметр для фильтрации по автомобилю
+  final int? selectedCarId;
+
+  const AnalyticsOptimizationTab({
+    super.key,
+    this.selectedCarId,
+  });
 
   List<T> _filterLastDays<T>(List<T> items, DateTime Function(T) getDate, int days) {
     final threshold = DateTime.now().subtract(Duration(days: days));
@@ -17,22 +23,35 @@ class AnalyticsOptimizationTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final generators = context.watch<GeneratorProvider>().generators;
-    final optimizations = context.watch<OptimizationProvider>().optimizations;
-    final inventories = context.watch<InventoryProvider>().inventories;
+    final allGenerators = context.watch<GeneratorProvider>().generators;
+    final allOptimizations = context.watch<OptimizationProvider>().optimizations;
+    final allInventories = context.watch<InventoryProvider>().inventories;
     final settings = context.watch<OptimizationSettingsProvider>();
 
-    final weeklyConsumption = _filterLastDays(inventories, (i) => i.date, 7)
+    // 🆕 ШАГ 1: Фильтруем агрегаты по выбранному автомобилю
+    final filteredGenerators = selectedCarId == null
+        ? allGenerators
+        : allGenerators.where((g) => g.carId == selectedCarId).toList();
+
+    // 🆕 ШАГ 2: Создаем Set ID разрешенных агрегатов для быстрого поиска O(1)
+    final allowedGenIds = filteredGenerators.map((g) => g.id).toSet();
+
+    // 🆕 ШАГ 3: Фильтруем события, оставляя только те, что относятся к разрешенным агрегатам
+    final filteredInventories = allInventories.where((i) => allowedGenIds.contains(i.generatorId)).toList();
+    final filteredOptimizations = allOptimizations.where((o) => allowedGenIds.contains(o.generatorId)).toList();
+
+    // 🆕 ШАГ 4: Расчеты теперь идут ТОЛЬКО по отфильтрованным данным
+    final weeklyConsumption = _filterLastDays(filteredInventories, (i) => i.date, 7)
         .where((i) => i.difference < 0).fold(0.0, (sum, i) => sum + i.difference.abs());
-    final weeklyOptimized = _filterLastDays(optimizations, (o) => o.date, 7)
+    final weeklyOptimized = _filterLastDays(filteredOptimizations, (o) => o.date, 7)
         .fold(0.0, (sum, o) => sum + o.fuelAmount);
     final weeklyAllowed = weeklyConsumption * (settings.weekLimit / 100);
     final weeklyRemaining = (weeklyAllowed - weeklyOptimized).clamp(0.0, weeklyAllowed);
     final isWeekExceeded = weeklyOptimized > weeklyAllowed;
 
-    final monthlyConsumption = _filterLastDays(inventories, (i) => i.date, 30)
+    final monthlyConsumption = _filterLastDays(filteredInventories, (i) => i.date, 30)
         .where((i) => i.difference < 0).fold(0.0, (sum, i) => sum + i.difference.abs());
-    final monthlyOptimized = _filterLastDays(optimizations, (o) => o.date, 30)
+    final monthlyOptimized = _filterLastDays(filteredOptimizations, (o) => o.date, 30)
         .fold(0.0, (sum, o) => sum + o.fuelAmount);
     final monthlyAllowed = monthlyConsumption * (settings.monthLimit / 100);
     final monthlyRemaining = (monthlyAllowed - monthlyOptimized).clamp(0.0, monthlyAllowed);
@@ -43,8 +62,8 @@ class AnalyticsOptimizationTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🆕 ДОБАВЛЕНО: Виджет статистики заправок в самом верху (теперь импорты используются)
-          const RefuelStatsCard(),
+          // 🆕 Передаем selectedCarId вниз, чтобы архитектура была согласованной
+          RefuelStatsCard(selectedCarId: selectedCarId),
           
           _buildCard('Недельная оптимизация', weeklyConsumption, weeklyOptimized, weeklyAllowed, weeklyRemaining, weeklyAllowed > 0 ? (weeklyOptimized / weeklyAllowed).clamp(0.0, 1.0) : 0.0, isWeekExceeded, settings.weekLimit),
           const SizedBox(height: 16),
@@ -52,11 +71,14 @@ class AnalyticsOptimizationTab extends StatelessWidget {
           const SizedBox(height: 24),
           const Text('Сводка по агрегатам', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          if (generators.isEmpty)
-            const Center(child: Text('Нет данных об агрегатах'))
+          
+          // 🆕 ИЗМЕНЕНО: Отрисовываем только отфильтрованные агрегаты
+          if (filteredGenerators.isEmpty)
+            const Center(child: Text('Нет данных об агрегатах для выбранного фильтра'))
           else
-            ...generators.map((gen) {
-              final genOpt = optimizations.where((o) => o.generatorId == gen.id).fold(0.0, (sum, o) => sum + o.fuelAmount);
+            ...filteredGenerators.map((gen) {
+              // 🆕 ИЗМЕНЕНО: Считаем оптимизации только из отфильтрованного списка
+              final genOpt = filteredOptimizations.where((o) => o.generatorId == gen.id).fold(0.0, (sum, o) => sum + o.fuelAmount);
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(

@@ -1,36 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/analytics_event_provider.dart';
+import '../providers/generator_provider.dart'; // 🆕 ДОБАВЛЕНО
 import '../models/analytics_event_model.dart';
 
 class RefuelStatsCard extends StatelessWidget {
-  const RefuelStatsCard({super.key});
+  final int? selectedCarId;
+
+  const RefuelStatsCard({
+    super.key,
+    this.selectedCarId,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // 🆕 ИЗМЕНЕНО: Берем данные из журнала событий (AnalyticsEventProvider), а не из RefuelProvider
     final allEvents = context.watch<AnalyticsEventProvider>().events;
+    final generators = context.watch<GeneratorProvider>().generators; // 🆕 Получаем агрегаты
     final now = DateTime.now();
 
-    // Фильтруем только события типа 'refuel'
-    final refuelEvents = allEvents.where((e) => e.type == 'refuel').toList();
+    // 1. Берем все события заправки
+    final allRefuelEvents = allEvents.where((e) => e.type == 'refuel').toList();
 
-    // Фильтрация по периодам
-    final todayRefuels = refuelEvents.where((e) => 
+    // 2. Определяем разрешенные ID агрегатов
+    // Если selectedCarId == null, берем все агрегаты. Иначе только агрегаты выбранного авто.
+    final allowedGenIds = selectedCarId == null
+        ? generators.map((g) => g.id).toSet()
+        : generators.where((g) => g.carId == selectedCarId).map((g) => g.id).toSet();
+
+    // 3. Фильтруем события: оставляем только те, где relatedId (теперь это generatorId) есть в разрешенных
+    final filteredRefuelEvents = allRefuelEvents
+        .where((e) => allowedGenIds.contains(e.relatedId))
+        .toList();
+
+    // 4. Фильтрация по периодам уже на основе отфильтрованных событий
+    final todayRefuels = filteredRefuelEvents.where((e) => 
       e.date.year == now.year && e.date.month == now.month && e.date.day == now.day
     ).toList();
 
-    final weekRefuels = refuelEvents.where((e) {
+    final weekRefuels = filteredRefuelEvents.where((e) {
       final diff = now.difference(e.date).inDays;
       return diff >= 0 && diff < 7;
     }).toList();
 
-    final monthRefuels = refuelEvents.where((e) {
+    final monthRefuels = filteredRefuelEvents.where((e) {
       final diff = now.difference(e.date).inDays;
       return diff >= 0 && diff < 30;
     }).toList();
 
-    //  ИЗМЕНЕНО: Извлекаем количество топлива из описания события
     final todayTotal = _extractFuelAmount(todayRefuels);
     final weekTotal = _extractFuelAmount(weekRefuels);
     final monthTotal = _extractFuelAmount(monthRefuels);
@@ -43,11 +59,19 @@ class RefuelStatsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.local_gas_station, color: Colors.blue, size: 24),
-                SizedBox(width: 8),
-                Text('Заправлено по чеку', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                const Icon(Icons.local_gas_station, color: Colors.blue, size: 24),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    selectedCarId == null 
+                        ? 'Заправлено по чеку (Все автомобили)' 
+                        : 'Заправлено по чеку (Выбранный автомобиль)',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+                    softWrap: true,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -56,17 +80,18 @@ class RefuelStatsCard extends StatelessWidget {
             _buildStatRow('За неделю:', weekTotal, weekRefuels.length),
             const SizedBox(height: 8),
             _buildStatRow('За месяц:', monthTotal, monthRefuels.length),
+            
+            // 🆕 Убрано оранжевое предупреждение, так как фильтрация теперь работает!
           ],
         ),
       ),
     );
   }
 
-  // 🆕 ИЗМЕНЕНО: Метод для извлечения количества топлива из описания события
   double _extractFuelAmount(List<AnalyticsEventModel> events) {
     double total = 0.0;
     for (final event in events) {
-      // Ищем число в описании вида "Заправка: по чеку заправлено 123.2 л"
+      // Регулярное выражение ищет число перед "л" в описании вида "Заправка Имя: по чеку заправлено 12.5 л"
       final match = RegExp(r'(\d+\.?\d*)\s*л').firstMatch(event.description);
       if (match != null) {
         final value = double.tryParse(match.group(1)!);
