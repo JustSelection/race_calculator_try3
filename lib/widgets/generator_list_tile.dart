@@ -29,7 +29,15 @@ class GeneratorListTile extends StatelessWidget {
     return '${car.brand} (${car.licensePlate})';
   }
 
-  // 🆕 Метод для отображения сводки по агрегату
+  // 🆕 Метод для определения цвета прогресс-бара в зависимости от уровня топлива
+  Color _getFuelColor(double current, double capacity) {
+    if (capacity <= 0) return Colors.grey;
+    final percentage = current / capacity;
+    if (percentage >= 0.3) return Colors.blue; // Норма
+    if (percentage >= 0.1) return Colors.orange; // Мало
+    return Colors.red; // Критически мало
+  }
+
   void _showSummary(BuildContext context) {
     showDialog(
       context: context,
@@ -56,7 +64,6 @@ class GeneratorListTile extends StatelessWidget {
     );
   }
 
-  // 🆕 Вспомогательный виджет для строк сводки
   Widget _buildDetailRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -69,17 +76,53 @@ class GeneratorListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🆕 Расчет процента заполнения (защита от деления на ноль)
+    final fuelPercentage = gen.capacity > 0 
+        ? (gen.currentFuel / gen.capacity).clamp(0.0, 1.0) 
+        : 0.0;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        onTap: () => _showSummary(context), // 🆕 Добавлен вызов сводки при нажатии на карточку
-        title: Text(gen.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('Топливо: ${gen.currentFuel} / ${gen.capacity} л\nАвто: ${_getCarInfo()}'),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        onTap: () => _showSummary(context),
+        title: Text(
+          gen.name, 
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        // 🆕 ИЗМЕНЕНО: Подпись заменена на колонку с информацией об авто и трек-баром
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              'Авто: ${_getCarInfo()}', 
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 8),
+            // Трек-бар уровня топлива
+            LinearProgressIndicator(
+              value: fuelPercentage,
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(_getFuelColor(gen.currentFuel, gen.capacity)),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 6),
+            // Точные цифры под трек-баром
+            Text(
+              '${gen.currentFuel.toStringAsFixed(1)} / ${gen.capacity} л',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+            ),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(Icons.local_fire_department, color: Colors.orange),
+              icon: const Icon(Icons.local_fire_department, color: Colors.orange, size: 22),
               tooltip: 'Работа агрегата',
               onPressed: () => Navigator.push(
                 context,
@@ -87,19 +130,27 @@ class GeneratorListTile extends StatelessWidget {
                   builder: (_) => InventoryScreen(preselectedGeneratorId: gen.id),
                 ),
               ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
+            const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue),
+              icon: const Icon(Icons.edit, color: Colors.blue, size: 22),
               tooltip: 'Редактировать',
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => GeneratorEditScreen(generator: gen)),
               ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
+            const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
+              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
               tooltip: 'Удалить',
               onPressed: onDelete,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),
