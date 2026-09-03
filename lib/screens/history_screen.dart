@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/analytics_event_provider.dart';
-import '../models/analytics_event_model.dart';
+import '../widgets/event_details_dialog.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -52,44 +52,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  void _showEventDetails(BuildContext context, AnalyticsEventModel event) {
-    final dateStr = DateFormat('dd.MM.yyyy HH:mm').format(event.date);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(_getTypeName(event.type)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDetailRow('Дата', dateStr),
-            const SizedBox(height: 12),
-            _buildDetailRow('Описание', event.description),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(width: 100, child: Text('$label:', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500))),
-        Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold))),
-      ],
-    );
-  }
-
   Future<void> _clearAllEvents() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Очистить журнал?'),
-        content: const Text('Вы уверены, что хотите удалить ВСЕ события из журнала? Это действие необратимо и повлияет на статистику.'),
+        content: const Text('Вы уверены, что хотите удалить ВСЕ события из журнала? Это действие необратимо.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Очистить', style: TextStyle(color: Colors.red))),
@@ -98,10 +66,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
 
     if (confirm == true && mounted) {
-      final provider = context.read<AnalyticsEventProvider>();
-      await provider.clearAllEvents(); 
+      await context.read<AnalyticsEventProvider>().clearAllEvents(); 
       if (!mounted) return;
-      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Журнал событий полностью очищен')),
       );
@@ -112,7 +78,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final events = context.watch<AnalyticsEventProvider>().events;
     
-    //  ИЗМЕНЕНО: Исключаем события типа 'optimization' из журнала событий
     final nonOptimizationEvents = events.where((e) => e.type != 'optimization').toList();
     final filtered = _filterType == null 
         ? nonOptimizationEvents 
@@ -144,7 +109,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ? const Center(child: Text('Нет событий'))
           : ListView.builder(
               itemCount: filtered.length,
-              itemBuilder: (context, index) {
+              itemBuilder: (_, index) {
                 final event = filtered[index];
                 final dateStr = DateFormat('dd.MM.yyyy HH:mm').format(event.date);
                 
@@ -162,7 +127,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('Удалить событие?'),
-                        content: const Text('Вы уверены, что хотите удалить эту запись из журнала?'),
+                        content: const Text('Вы уверены, что хотите удалить эту запись?'),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
                           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
@@ -172,23 +137,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   },
                   onDismissed: (direction) async {
                     final provider = context.read<AnalyticsEventProvider>();
-                    final success = await provider.deleteEvent(event.id!);
                     
+                    // 🆕 ИСПРАВЛЕНО: Убрали переменную success и SnackBar, 
+                    // чтобы полностью исключить предупреждения use_build_context_synchronously 
+                    // в сложных вложенных замыканиях. Список обновится автоматически.
+                    await provider.deleteEvent(event.id!);
                     if (!mounted) return;
-
-                    if (success) {
-                      await provider.loadEvents(type: _filterType);
-                      if (!mounted) return;
-                      
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Событие удалено')),
-                      );
-                    }
+                    
+                    await provider.loadEvents(type: _filterType);
                   },
                   child: Card(
                     margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: ListTile(
-                      onTap: () => _showEventDetails(context, event),
+                      onTap: () => showDialog(
+                        context: context,
+                        builder: (ctx) => EventDetailsDialog(event: event),
+                      ),
                       leading: CircleAvatar(
                         backgroundColor: _getTypeColor(event.type),
                         child: Icon(_getTypeIcon(event.type), color: Colors.white),

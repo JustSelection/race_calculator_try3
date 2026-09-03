@@ -8,7 +8,6 @@ import '../widgets/analytics_reset_button.dart';
 import 'refuel_stats_card.dart';
 
 class AnalyticsOptimizationTab extends StatelessWidget {
-  // 🆕 ДОБАВЛЕНО: параметр для фильтрации по автомобилю
   final int? selectedCarId;
 
   const AnalyticsOptimizationTab({
@@ -28,19 +27,15 @@ class AnalyticsOptimizationTab extends StatelessWidget {
     final allInventories = context.watch<InventoryProvider>().inventories;
     final settings = context.watch<OptimizationSettingsProvider>();
 
-    // 🆕 ШАГ 1: Фильтруем агрегаты по выбранному автомобилю
     final filteredGenerators = selectedCarId == null
         ? allGenerators
         : allGenerators.where((g) => g.carId == selectedCarId).toList();
 
-    // 🆕 ШАГ 2: Создаем Set ID разрешенных агрегатов для быстрого поиска O(1)
     final allowedGenIds = filteredGenerators.map((g) => g.id).toSet();
 
-    // 🆕 ШАГ 3: Фильтруем события, оставляя только те, что относятся к разрешенным агрегатам
     final filteredInventories = allInventories.where((i) => allowedGenIds.contains(i.generatorId)).toList();
     final filteredOptimizations = allOptimizations.where((o) => allowedGenIds.contains(o.generatorId)).toList();
 
-    // 🆕 ШАГ 4: Расчеты теперь идут ТОЛЬКО по отфильтрованным данным
     final weeklyConsumption = _filterLastDays(filteredInventories, (i) => i.date, 7)
         .where((i) => i.difference < 0).fold(0.0, (sum, i) => sum + i.difference.abs());
     final weeklyOptimized = _filterLastDays(filteredOptimizations, (o) => o.date, 7)
@@ -62,7 +57,6 @@ class AnalyticsOptimizationTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🆕 Передаем selectedCarId вниз, чтобы архитектура была согласованной
           RefuelStatsCard(selectedCarId: selectedCarId),
           
           _buildCard('Недельная оптимизация', weeklyConsumption, weeklyOptimized, weeklyAllowed, weeklyRemaining, weeklyAllowed > 0 ? (weeklyOptimized / weeklyAllowed).clamp(0.0, 1.0) : 0.0, isWeekExceeded, settings.weekLimit),
@@ -72,12 +66,10 @@ class AnalyticsOptimizationTab extends StatelessWidget {
           const Text('Сводка по агрегатам', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           
-          // 🆕 ИЗМЕНЕНО: Отрисовываем только отфильтрованные агрегаты
           if (filteredGenerators.isEmpty)
             const Center(child: Text('Нет данных об агрегатах для выбранного фильтра'))
           else
             ...filteredGenerators.map((gen) {
-              // 🆕 ИЗМЕНЕНО: Считаем оптимизации только из отфильтрованного списка
               final genOpt = filteredOptimizations.where((o) => o.generatorId == gen.id).fold(0.0, (sum, o) => sum + o.fuelAmount);
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -160,15 +152,28 @@ class AnalyticsOptimizationTab extends StatelessWidget {
               ],
             ),
             
+            // 🆕 ЗАДАЧА 4: Заменено "Совет" на "Предупреждение" + добавлена иконка и улучшено оформление
             if (isExceeded) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(8)),
-                child: const Text(
-                  'Совет: Объем оптимизации превышает допустимый лимит от фактического расхода.', 
-                  style: TextStyle(fontSize: 13, color: Colors.red, fontWeight: FontWeight.w500),
-                  softWrap: true,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade300, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Предупреждение: Объем оптимизации превышает допустимый лимит от фактического расхода.', 
+                        style: TextStyle(fontSize: 13, color: Colors.red.shade900, fontWeight: FontWeight.w600, height: 1.3),
+                        softWrap: true,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

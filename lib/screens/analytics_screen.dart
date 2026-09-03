@@ -16,6 +16,7 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   int? _selectedCarId;
+  bool _isDefaultSet = false; // 🆕 Флаг для установки автомобиля по умолчанию
 
   @override
   void initState() {
@@ -25,6 +26,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       context.read<OptimizationProvider>().loadOptimizations();
       context.read<OptimizationSettingsProvider>().loadSettings();
       context.read<InventoryProvider>().loadInventories();
+      
+      // 🆕 ЗАДАЧА 3: Выбираем первый автомобиль из списка по умолчанию при загрузке
+      if (!_isDefaultSet) {
+        final cars = context.read<CarProvider>().cars;
+        if (cars.isNotEmpty && mounted) {
+          setState(() {
+            _selectedCarId = cars.first.id;
+            _isDefaultSet = true;
+          });
+        }
+      }
     });
   }
 
@@ -32,12 +44,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Widget build(BuildContext context) {
     final cars = context.watch<CarProvider>().cars;
 
-    // 🆕 ЗАЩИТА: гарантируем, что initialValue всегда есть в списке items.
-    // Если _selectedCarId вдруг окажется не в списке cars, сбрасываем его в null,
-    // чтобы избежать фатальной ошибки "There should be exactly one item with [DropdownButton]'s value".
-    final safeInitialValue = _selectedCarId == null || cars.any((c) => c.id == _selectedCarId)
+    // 🆕 Реактивная защита: если список машин обновился, а дефолтный еще не выбран
+    if (!_isDefaultSet && cars.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isDefaultSet) {
+          setState(() {
+            _selectedCarId = cars.first.id;
+            _isDefaultSet = true;
+          });
+        }
+      });
+    }
+
+    // 🆕 ЗАЩИТА: гарантируем, что initialValue всегда валиден и существует в списке
+    final safeInitialValue = cars.any((c) => c.id == _selectedCarId)
         ? _selectedCarId
-        : null;
+        : (cars.isNotEmpty ? cars.first.id : null);
 
     return Scaffold(
       appBar: AppBar(
@@ -48,35 +70,33 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: DropdownButtonFormField<int?>(
-              // 🆕 ИСПРАВЛЕНО: используем initialValue вместо value (value is deprecated after v3.33.0)
               initialValue: safeInitialValue,
               decoration: const InputDecoration(
                 labelText: 'Автомобиль',
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
+              // 🆕 ЗАДАЧА 3: Пункт "Все автомобили" полностью удален. Остались только реальные машины.
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null, 
-                  child: Text('Все автомобили'),
-                ),
                 ...cars.map((car) => DropdownMenuItem<int?>(
                       value: car.id,
                       child: Text('${car.brand} (${car.licensePlate})'),
                     )),
               ],
               onChanged: (value) {
-                setState(() {
-                  _selectedCarId = value;
-                });
+                if (value != null) {
+                  setState(() {
+                    _selectedCarId = value;
+                  });
+                }
               },
             ),
           ),
           
           Expanded(
-            child: AnalyticsOptimizationTab(
-              selectedCarId: _selectedCarId,
-            ),
+            child: safeInitialValue != null 
+                ? AnalyticsOptimizationTab(selectedCarId: safeInitialValue)
+                : const Center(child: Text('Нет добавленных автомобилей')),
           ),
         ],
       ),
